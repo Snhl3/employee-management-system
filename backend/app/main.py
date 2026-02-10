@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from .models import base  # Ensures all models are registered
 from .api import employees, dashboard, settings
 
 app = FastAPI(title="Employee Management System API")

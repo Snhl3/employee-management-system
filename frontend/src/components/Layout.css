@@ -1,22 +1,9 @@
 .main-content {
     margin-left: 260px;
-    padding: 2.5rem;
-    min-height: 100vh;
-    width: calc(100% - 260px);
 }
 
 @media (max-width: 768px) {
-    .sidebar {
-        width: 80px;
-    }
-
-    .sidebar .logo h2,
-    .sidebar .nav-item span:not(.icon) {
-        display: none;
-    }
-
     .main-content {
         margin-left: 80px;
-        width: calc(100% - 80px);
     }
 }

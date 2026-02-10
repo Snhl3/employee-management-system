@@ -3,7 +3,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import SessionLocal
-from app.models.employee import Employee, WorkMode, EmployeeStatus
+from app.models.base import Employee, WorkMode, EmployeeStatus
 from app.models.llm_settings import LLMSettings
 
 def seed():
