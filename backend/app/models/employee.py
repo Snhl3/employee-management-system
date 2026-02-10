@@ -1,0 +1,36 @@
+from sqlalchemy import Column, Integer, String, Float, Text, Enum, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
+from datetime import datetime
+import enum
+from ..database import Base
+
+class WorkMode(str, enum.Enum):
+    REMOTE = "REMOTE"
+    OFFICE = "OFFICE"
+
+class EmployeeStatus(str, enum.Enum):
+    ON_BENCH = "ON_BENCH"
+    ON_CLIENT = "ON_CLIENT"
+
+class Employee(Base):
+    __tablename__ = "employees"
+
+    id = Column(Integer, primary_key=True, index=True)
+    emp_id = Column(String(50), unique=True, index=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    phone = Column(String(20))
+    location = Column(String(255))
+    tech = Column(String(255))  # Primary tech stack
+    expertise = Column(String(255))
+    level = Column(String(50))
+    experience = Column(Float)
+    work_mode = Column(Enum(WorkMode), default=WorkMode.OFFICE)
+    status = Column(Enum(EmployeeStatus), default=EmployeeStatus.ON_BENCH)
+    bandwidth = Column(Integer, default=100) # Percentage
+    career_summary = Column(Text)
+    search_phrase = Column(Text) # For AI-driven search indexing
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    work_history = relationship("WorkHistory", back_populates="employee", cascade="all, delete-orphan")
+    education = relationship("Education", back_populates="employee", cascade="all, delete-orphan")
