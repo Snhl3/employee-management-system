@@ -14,6 +14,15 @@ An open-source Employee Management System built with a robust monorepo architect
 - **Frontend**: React + TypeScript (Vite)
 - **Authentication**: JWT
 
+## Quick Start (One-Click)
+
+The easiest way to run the project is using the provided startup scripts:
+
+- **Windows**: Double-click [run_ems.bat](run_ems.bat) or run `.\run_ems.bat` in your terminal.
+- **Linux/macOS**: Run `chmod +x run_ems.sh && ./run_ems.sh` in your terminal.
+
+This will start both the backend and frontend servers and open the application in your browser at `http://localhost:5173`.
+
 ## Architecture Overview
 
 The project is structured as a monorepo:
