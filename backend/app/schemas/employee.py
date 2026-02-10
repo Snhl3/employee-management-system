@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
-from .employee import WorkMode, EmployeeStatus
+from ..models.employee import WorkMode, EmployeeStatus
 from .history_edu import WorkHistoryCreate, EducationCreate, WorkHistoryResponse, EducationResponse
 
 class EmployeeBase(BaseModel):
