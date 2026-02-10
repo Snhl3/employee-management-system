@@ -2,6 +2,10 @@
 
 An open-source Employee Management System built with a robust monorepo architecture. 
 
+### 🌟 [Live Demo (GitHub Repository)](https://github.com/Snhl3/employee-management-system)
+> [!TIP]
+> To see the live website demo, you can deploy the `/frontend` to Vercel or GitHub Pages!
+
 ## Tech Stack
 
 - **Backend**: Python + FastAPI
