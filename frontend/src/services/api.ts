@@ -6,7 +6,7 @@ const api = axios.create({
     baseURL: API_BASE_URL,
 });
 
-// Add a request interceptor to include the token in headers
+// Request interceptor: attach token to every request
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -14,6 +14,21 @@ api.interceptors.request.use((config) => {
     }
     return config;
 });
+
+// Response interceptor: handle token expiration or invalid token
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+            // Check if it's not the login endpoint to avoid infinite loops
+            if (!error.config.url.includes('/auth/login')) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
 
 export const login = async (credentials: any) => {
     const params = new URLSearchParams();

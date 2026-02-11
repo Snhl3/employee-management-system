@@ -20,7 +20,7 @@ def seed_admins():
                 "role": UserRole.ADMIN
             },
             {
-                "email": "kishore.parida@neosofttech.com",
+                "email": "kishor.parida@neosofttech.com",
                 "password": "admin123",
                 "role": UserRole.ADMIN
             }
@@ -38,7 +38,11 @@ def seed_admins():
                 db.add(new_admin)
                 print(f"Created admin: {admin_data['email']}")
             else:
-                print(f"Admin already exists: {admin_data['email']}")
+                # Force update password hash and role
+                user.hashed_password = get_password_hash(admin_data["password"])
+                user.role = admin_data["role"]
+                user.is_active = True
+                print(f"Updated admin: {admin_data['email']}")
         
         db.commit()
         print("Admin seeding completed successfully!")

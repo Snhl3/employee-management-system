@@ -1,14 +1,22 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import './Sidebar.css';
 
 const Sidebar = () => {
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        navigate('/login');
+        window.location.reload();
+    };
+
     return (
         <aside className="sidebar bg-dark text-white d-flex flex-column vh-100 position-fixed">
             <div className="p-4 border-bottom border-secondary mb-3">
                 <h2 className="h4 m-0 text-primary fw-bold">EMS</h2>
             </div>
-            <nav className="nav flex-column nav-pills px-3 gap-2">
+            <nav className="nav flex-column nav-pills px-3 gap-2 flex-grow-1">
                 <NavLink to="/" className={({ isActive }) => `nav-link text-white d-flex align-items-center gap-2 ${isActive ? 'active bg-primary' : ''}`}>
                     <i className="bi bi-speedometer2"></i> <span>Dashboard</span>
                 </NavLink>
@@ -25,6 +33,14 @@ const Sidebar = () => {
                     <i className="bi bi-gear"></i> <span>LLM Setting</span>
                 </NavLink>
             </nav>
+            <div className="p-3 border-top border-secondary mt-auto">
+                <button
+                    onClick={handleLogout}
+                    className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2 border-0"
+                >
+                    <i className="bi bi-box-arrow-right"></i> <span>Logout</span>
+                </button>
+            </div>
         </aside>
     );
 };
