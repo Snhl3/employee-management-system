@@ -3,7 +3,8 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import ProfileSearch from './pages/ProfileSearch';
 import LLMSettings from './pages/LLMSettings';
-import { MyProfile, UserManagement } from './pages/Placeholders';
+import UserManagement from './pages/UserManagement';
+import { MyProfile } from './pages/Placeholders';
 import './styles/theme.css';
 
 function App() {

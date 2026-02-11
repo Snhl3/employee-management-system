@@ -1,0 +1,53 @@
+.user-management-page {
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.user-management-page .card {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.user-management-page .table thead th {
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    border-bottom-width: 0;
+}
+
+.user-management-page .table tbody td {
+    border-color: #f8f9fa;
+}
+
+.user-management-page .form-select-sm {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.user-management-page .form-check-input {
+    cursor: pointer;
+    width: 2.5em;
+    height: 1.25em;
+}
+
+.badge-success-subtle {
+    background-color: rgba(25, 135, 84, 0.1);
+    color: #198754;
+}
+
+.badge-danger-subtle {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+}

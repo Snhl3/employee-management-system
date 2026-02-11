@@ -20,4 +20,3 @@ const PlaceholderPage = ({ title }: { title: string }) => (
 );
 
 export const MyProfile = () => <PlaceholderPage title="My Profile" />;
-export const UserManagement = () => <PlaceholderPage title="User Management" />;
