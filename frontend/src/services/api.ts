@@ -62,7 +62,13 @@ export const fetchLLMSettings = async () => {
     return response.data;
 };
 
-export const updateLLMSettings = async (settings: { provider: string; model_name: string }) => {
+export interface LLMSettings {
+    provider: string;
+    model_name: string;
+    api_base?: string;
+}
+
+export const updateLLMSettings = async (settings: LLMSettings) => {
     const response = await api.post('/settings/llm', settings);
     return response.data;
 };

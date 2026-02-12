@@ -46,6 +46,8 @@ const MyProfile = () => {
     const [autofilling, setAutofilling] = useState(false);
     const [generatingSummary, setGeneratingSummary] = useState(false);
     const [message, setMessage] = useState('');
+    const [showParseModal, setShowParseModal] = useState(false);
+    const [parseText, setParseText] = useState('');
 
     useEffect(() => {
         const loadProfile = async () => {
@@ -131,15 +133,20 @@ const MyProfile = () => {
         if (!profile) return;
         setAutofilling(true);
         try {
+            // Use the text from the modal, or fallback to summary if empty (though button is disabled)
+            const textToParse = parseText || profile.career_summary || "Please generate a sample profile.";
+
             const response = await autofillProfile({
-                name: profile.name,
-                career_summary: profile.career_summary
+                name: profile.name, // Keep context
+                career_summary: textToParse
             });
             setProfile({ ...profile, ...response });
-            setMessage('AI auto-filled your profile! Review and save.');
+            setMessage('AI parsed your text and updated the profile! Review and save.');
+            setShowParseModal(false);
+            setParseText('');
             setTimeout(() => setMessage(''), 5000);
         } catch (error) {
-            setMessage('AI auto-fill failed. Check LLM settings.');
+            setMessage('AI parsing failed. Check LLM settings.');
         } finally {
             setAutofilling(false);
         }
@@ -175,11 +182,11 @@ const MyProfile = () => {
                     <button
                         type="button"
                         className="btn btn-outline-primary d-flex align-items-center"
-                        onClick={handleAIAutofill}
+                        onClick={() => setShowParseModal(true)}
                         disabled={autofilling}
                     >
-                        {autofilling ? <span className="spinner-border spinner-border-sm me-2"></span> : <i className="bi bi-robot me-2"></i>}
-                        Auto-fill using AI
+                        {autofilling ? <span className="spinner-border spinner-border-sm me-2"></span> : <i className="bi bi-magic me-2"></i>}
+                        Parse Resume / Text
                     </button>
                     <button type="button" className="btn btn-success fw-bold px-4" onClick={handleSave} disabled={saving}>
                         {saving ? <span className="spinner-border spinner-border-sm me-2"></span> : <i className="bi bi-save me-2"></i>}
@@ -187,6 +194,36 @@ const MyProfile = () => {
                     </button>
                 </div>
             </header>
+
+            {/* Parse Resume Modal */}
+            {showParseModal && (
+                <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="modal-dialog modal-lg">
+                        <div className="modal-content">
+                            <div className="modal-header">
+                                <h5 className="modal-title">Parse Resume or Profile Text</h5>
+                                <button type="button" className="btn-close" onClick={() => setShowParseModal(false)}></button>
+                            </div>
+                            <div className="modal-body">
+                                <p className="text-muted small">Paste your resume, LinkedIn bio, or any raw text description below. The AI will extract structured data to fill your profile.</p>
+                                <textarea
+                                    className="form-control"
+                                    rows={10}
+                                    value={parseText}
+                                    onChange={(e) => setParseText(e.target.value)}
+                                    placeholder="Paste text here..."
+                                ></textarea>
+                            </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowParseModal(false)}>Cancel</button>
+                                <button type="button" className="btn btn-primary" onClick={handleAIAutofill} disabled={autofilling || !parseText.trim()}>
+                                    {autofilling ? 'Parsing...' : 'Analyze & Fill'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {message && (
                 <div className={`alert ${message.includes('successfully') || message.includes('generated') ? 'alert-success' : 'alert-danger'} border-0 shadow-sm text-center mb-4`}>
