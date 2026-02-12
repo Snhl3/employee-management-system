@@ -11,6 +11,7 @@ class WorkHistory(Base):
     role = Column(String(255), nullable=False)
     start_date = Column(Date)
     end_date = Column(Date, nullable=True) # Null if current job
+    project = Column(String(255), nullable=True)
     description = Column(Text)
 
     employee = relationship("Employee", back_populates="work_history")

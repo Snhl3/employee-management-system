@@ -7,6 +7,7 @@ class WorkHistoryBase(BaseModel):
     role: str
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+    project: Optional[str] = None
     description: Optional[str] = None
 
 class WorkHistoryCreate(WorkHistoryBase):

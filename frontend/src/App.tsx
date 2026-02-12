@@ -5,8 +5,8 @@ import Dashboard from './pages/Dashboard';
 import ProfileSearch from './pages/ProfileSearch';
 import LLMSettings from './pages/LLMSettings';
 import UserManagement from './pages/UserManagement';
+import MyProfile from './pages/MyProfile';
 import Login from './pages/Login';
-import { MyProfile } from './pages/Placeholders';
 import './styles/theme.css';
 
 function App() {

@@ -23,8 +23,9 @@ class Employee(Base):
     location = Column(String(255))
     tech = Column(String(255))  # Primary tech stack
     expertise = Column(String(255))
-    level = Column(String(50))
-    experience = Column(Float)
+    level = Column(Integer, default=1) # 1-10 Scale
+    experience_years = Column(Float, default=0.0)
+    experience = Column(Float) # Keeping for backward compatibility or unrelated usage if needed, otherwise we can deprecate
     work_mode = Column(Enum(WorkMode), default=WorkMode.OFFICE)
     status = Column(Enum(EmployeeStatus), default=EmployeeStatus.ON_BENCH)
     bandwidth = Column(Integer, default=100) # Percentage

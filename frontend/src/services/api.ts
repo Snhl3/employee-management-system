@@ -67,6 +67,32 @@ export const updateLLMSettings = async (settings: { provider: string; model_name
     return response.data;
 };
 
+// Employee Profile APIs
+export const fetchMyProfile = async () => {
+    const response = await api.get('/employees/me');
+    return response.data;
+};
+
+export const updateMyProfile = async (profileData: any) => {
+    const response = await api.put('/employees/me', profileData);
+    return response.data;
+};
+
+export const updateEmployee = async (empId: string, profileData: any) => {
+    const response = await api.put(`/employees/${empId}`, profileData);
+    return response.data;
+};
+
+export const autofillProfile = async (partialData: any) => {
+    const response = await api.post('/employees/autofill', partialData);
+    return response.data;
+};
+
+export const generateProfileSummary = async () => {
+    const response = await api.post('/employees/generate-summary');
+    return response.data;
+};
+
 // User Management APIs
 export const fetchUsers = async () => {
     const response = await api.get('/users/');

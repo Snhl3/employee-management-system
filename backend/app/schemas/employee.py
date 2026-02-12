@@ -12,7 +12,8 @@ class EmployeeBase(BaseModel):
     location: Optional[str] = None
     tech: Optional[str] = None
     expertise: Optional[str] = None
-    level: Optional[str] = None
+    level: int = 1
+    experience_years: Optional[float] = 0.0
     experience: Optional[float] = None
     work_mode: WorkMode = WorkMode.OFFICE
     status: EmployeeStatus = EmployeeStatus.ON_BENCH

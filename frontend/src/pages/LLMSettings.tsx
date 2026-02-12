@@ -69,7 +69,6 @@ const LLMSettings = () => {
                                     placeholder="e.g. gpt-4, claude-3-opus"
                                 />
                             </div>
-                            <div id="emailHelp" className="form-text text-muted">Specify the exact model ID from provide documentation.</div>
                         </div>
 
                         <button type="submit" className="btn btn-primary w-100 py-2 fw-bold" disabled={saving}>
