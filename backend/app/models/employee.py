@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, Enum, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Text, Enum, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -21,11 +21,9 @@ class Employee(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     phone = Column(String(20))
     location = Column(String(255))
-    tech = Column(String(255))  # Primary tech stack
-    expertise = Column(String(255))
+    tech = Column(JSON)  # Structured tech: [{"tech": "Python", "experience_years": 4, "level": "Advanced"}]
     level = Column(Integer, default=1) # 1-10 Scale
     experience_years = Column(Float, default=0.0)
-    experience = Column(Float) # Keeping for backward compatibility or unrelated usage if needed, otherwise we can deprecate
     work_mode = Column(Enum(WorkMode), default=WorkMode.OFFICE)
     status = Column(Enum(EmployeeStatus), default=EmployeeStatus.ON_BENCH)
     bandwidth = Column(Integer, default=100) # Percentage

@@ -1,5 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 import json
+import io
+import pypdf
+import docx
+from datetime import datetime
 from sqlalchemy.orm import Session
 from typing import List
 from ..database import get_db
@@ -47,23 +51,55 @@ def update_employee(
     return update_employee_record(db_employee, employee_update, db)
 
 def update_employee_record(db_employee, employee_update, db):
+    print(f"DEBUG: Updating employee record for ID: {db_employee.emp_id}")
     # Update flat fields
-    for key, value in employee_update.dict(exclude={"work_history", "education"}).items():
+    update_data = employee_update.model_dump(exclude={"work_history", "education"})
+    for key, value in update_data.items():
         setattr(db_employee, key, value)
     
-    # Update work history (simple replace for now)
+    # Update work history (simple replace)
     db.query(history_models.WorkHistory).filter(history_models.WorkHistory.employee_id == db_employee.id).delete()
     for hist in employee_update.work_history:
-        db_employee.work_history.append(history_models.WorkHistory(**hist.dict()))
+        db_employee.work_history.append(history_models.WorkHistory(**hist.model_dump()))
         
-    # Update education (simple replace for now)
+    # Update education (simple replace)
     db.query(edu_models.Education).filter(edu_models.Education.employee_id == db_employee.id).delete()
     for edu in employee_update.education:
-        db_employee.education.append(edu_models.Education(**edu.dict()))
+        db_employee.education.append(edu_models.Education(**edu.model_dump()))
         
+    db_employee.last_updated = datetime.now()
     db.commit()
     db.refresh(db_employee)
     return db_employee
+
+@router.post("/parse-resume")
+async def parse_resume_endpoint(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    filename = file.filename.lower()
+    if not filename.endswith(('.pdf', '.docx')):
+        raise HTTPException(status_code=400, detail="Invalid file type. Only PDF and DOCX are supported.")
+    
+    try:
+        contents = await file.read()
+        text = ""
+        
+        if filename.endswith('.pdf'):
+            pdf_reader = pypdf.PdfReader(io.BytesIO(contents))
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        elif filename.endswith('.docx'):
+            doc = docx.Document(io.BytesIO(contents))
+            for para in doc.paragraphs:
+                text += para.text + "\n"
+        
+        if not text.strip():
+            raise HTTPException(status_code=422, detail="Parsed text is empty. The file might be an image or encrypted.")
+            
+        return {"text": text}
+    except Exception as e:
+        print(f"Error parsing resume: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to parse resume: {str(e)}")
 
 @router.post("/autofill")
 def autofill_profile(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

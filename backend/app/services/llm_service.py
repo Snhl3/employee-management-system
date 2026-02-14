@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 from openai import OpenAI
 from ..models.llm_settings import LLMSettings
 from sqlalchemy.orm import Session
@@ -8,6 +9,7 @@ class LLMService:
     def __init__(self, db: Session):
         self.db = db
         self.settings = db.query(LLMSettings).first()
+        self.logger = logging.getLogger(__name__)
 
     def generate_profile(self, partial_data: str) -> dict:
         provider = self.settings.provider.lower()
@@ -127,10 +129,20 @@ class LLMService:
             "email": "...",
             "phone": "...",
             "location": "...",
-            "tech": "...",
-            "expertise": "...",
+            "tech": [
+                {{
+                    "tech": "Python",
+                    "experience_years": 4.0,
+                    "level": "Advanced"
+                }},
+                {{
+                    "tech": "React",
+                    "experience_years": 2.0,
+                    "level": "Intermediate"
+                }}
+            ],
             "level": int (1-10),
-            "experience": float,
+            "experience_years": float,
             "work_mode": "REMOTE" or "OFFICE",
             "status": "ON_BENCH" or "ON_CLIENT",
             "bandwidth": int (0-100),
@@ -155,6 +167,9 @@ class LLMService:
                 }}
             ]
         }}
+        
+        IMPORTANT: For "tech", extract technology names with estimated experience years and proficiency level.
+        Level must be one of: "Beginner", "Intermediate", "Advanced", "Expert"
         """
 
     def _get_summary_prompt(self, profile_data: dict) -> str:
@@ -182,10 +197,18 @@ class LLMService:
             # ... rest of mock data ...
             "phone": "+1 (555) 0123-456",
             "location": "San Francisco, CA",
-            "tech": "React, Python, FastAPI, AWS",
-            "expertise": "Full Stack Development",
+            "tech": [
+                {"tech": "Python", "experience_years": 4.0, "level": "Advanced"},
+                {"tech": "React", "experience_years": 3.0, "level": "Advanced"},
+                {"tech": "FastAPI", "experience_years": 2.5, "level": "Intermediate"},
+                {"tech": "TypeScript", "experience_years": 3.0, "level": "Advanced"},
+                {"tech": "AWS", "experience_years": 2.0, "level": "Intermediate"},
+                {"tech": "Docker", "experience_years": 2.0, "level": "Intermediate"},
+                {"tech": "PostgreSQL", "experience_years": 3.5, "level": "Advanced"},
+                {"tech": "Redis", "experience_years": 1.5, "level": "Beginner"}
+            ],
             "level": 7,
-            "experience": 5.5,
+            "experience_years": 5.5,
             "work_mode": "REMOTE",
             "status": "ON_CLIENT",
             "bandwidth": 100,
@@ -228,3 +251,25 @@ class LLMService:
              role = profile_data["work_history"][0].get("role", "Software Engineer")
              
         return f"{name} is a highly engaged {role} specializing in {tech}. They have a strong track record of delivering high-quality solutions and driving technical excellence. Proven ability to adapt to new challenges and collaborate effectively in dynamic environments."
+
+    def fetch_available_models(self, provider: str) -> list:
+        provider = provider.lower()
+        if provider == "ollama":
+            try:
+                import requests
+                # Use settings.api_base or default
+                api_base = self.settings.api_base if (self.settings and self.settings.api_base) else "http://localhost:11434/v1"
+                # Extract host from api_base (strip /v1)
+                host = api_base.split("/v1")[0]
+                response = requests.get(f"{host}/api/tags", timeout=5)
+                if response.status_code == 200:
+                    models = response.json().get("models", [])
+                    return [m["name"] for m in models]
+            except Exception as e:
+                print(f"Ollama fetch failed: {e}")
+            return ["llama3", "mistral", "phi3"] # Fallback
+        elif provider == "openai":
+            # Return curated list of popular models
+            return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+        else:
+            return ["mock-model"]

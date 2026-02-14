@@ -83,11 +83,13 @@ const Dashboard = () => {
                                         </div>
                                         <div>
                                             <h6 className="mb-0 fw-bold">{p.name}</h6>
-                                            <small className="text-muted">{p.tech} • {p.level}</small>
+                                            <small className="text-muted">
+                                                {Array.isArray(p.tech) ? p.tech.map((t: any) => t.tech).join(', ') : p.tech} • {p.level}
+                                            </small>
                                         </div>
                                     </div>
-                                    <span className={`badge rounded-pill ${p.status === 'on_bench' ? 'bg-warning' : 'bg-success'}`}>
-                                        {p.status.replace('_', ' ')}
+                                    <span className={`badge rounded-pill ${p.status?.toLowerCase() === 'on_bench' ? 'bg-warning' : 'bg-success'}`}>
+                                        {p.status?.replace('_', ' ')}
                                     </span>
                                 </div>
                             )) : <div className="p-4 text-center text-muted">No profiles updated recently.</div>}

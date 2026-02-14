@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import ProfileSearch from './pages/ProfileSearch';
@@ -42,29 +43,31 @@ function App() {
     const isAuthenticated = !!token;
 
     return (
-        <Router>
-            <Routes>
-                {/* Redirect based on authentication state */}
-                <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" />} />
+        <ErrorBoundary>
+            <Router>
+                <Routes>
+                    {/* Redirect based on authentication state */}
+                    <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" />} />
 
-                <Route path="/*" element={
-                    isAuthenticated ? (
-                        <Layout>
-                            <Routes>
-                                <Route path="/" element={<Dashboard />} />
-                                <Route path="/my-profile" element={<MyProfile />} />
-                                <Route path="/search" element={<ProfileSearch />} />
-                                <Route path="/users" element={<UserManagement />} />
-                                <Route path="/settings" element={<LLMSettings />} />
-                                <Route path="*" element={<Navigate to="/" />} />
-                            </Routes>
-                        </Layout>
-                    ) : (
-                        <Navigate to="/login" />
-                    )
-                } />
-            </Routes>
-        </Router>
+                    <Route path="/*" element={
+                        isAuthenticated ? (
+                            <Layout>
+                                <Routes>
+                                    <Route path="/" element={<Dashboard />} />
+                                    <Route path="/my-profile" element={<MyProfile />} />
+                                    <Route path="/search" element={<ProfileSearch />} />
+                                    <Route path="/users" element={<UserManagement />} />
+                                    <Route path="/settings" element={<LLMSettings />} />
+                                    <Route path="*" element={<Navigate to="/" />} />
+                                </Routes>
+                            </Layout>
+                        ) : (
+                            <Navigate to="/login" />
+                        )
+                    } />
+                </Routes>
+            </Router>
+        </ErrorBoundary>
     );
 }
 

@@ -59,15 +59,19 @@ const ProfileSearch = () => {
                                 <div className="card h-100 border-0 shadow-sm">
                                     <div className="card-body">
                                         <h5 className="card-title fw-bold mb-1">{p.name}</h5>
-                                        <p className="text-primary small fw-semibold mb-3">{p.tech}</p>
+                                        <div className="mb-3">
+                                            {Array.isArray(p.tech) ? p.tech.map((t: any, i: number) => (
+                                                <span key={i} className="badge bg-primary-subtle text-primary me-1 mb-1 fw-normal">
+                                                    {t.tech} ({t.experience_years}y)
+                                                </span>
+                                            )) : <span className="text-muted small">No tech specified</span>}
+                                        </div>
                                         <div className="d-flex gap-3 mb-3 text-muted small">
                                             <span><i className="bi bi-geo-alt me-1"></i>{p.location || 'Remote'}</span>
-                                            <span><i className="bi bi-clock me-1"></i>{p.experience} Years</span>
+                                            <span><i className="bi bi-clock me-1"></i>{p.experience_years} Years</span>
                                         </div>
-                                        <div className="d-flex flex-wrap gap-2">
-                                            {p.expertise?.split(',').map((tag: string) => (
-                                                <span key={tag} className="badge bg-light text-dark border fw-normal">{tag.trim()}</span>
-                                            ))}
+                                        <div className="card-text small text-muted text-truncate-2">
+                                            {p.career_summary || 'No career summary provided.'}
                                         </div>
                                     </div>
                                 </div>

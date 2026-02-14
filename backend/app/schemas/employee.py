@@ -4,17 +4,20 @@ from datetime import datetime
 from ..models.employee import WorkMode, EmployeeStatus
 from .history_edu import WorkHistoryCreate, EducationCreate, WorkHistoryResponse, EducationResponse
 
+class TechExperience(BaseModel):
+    tech: str
+    experience_years: float
+    level: str  # Beginner, Intermediate, Advanced, Expert
+
 class EmployeeBase(BaseModel):
     emp_id: str
     name: str
     email: EmailStr
     phone: Optional[str] = None
     location: Optional[str] = None
-    tech: Optional[str] = None
-    expertise: Optional[str] = None
+    tech: Optional[List[TechExperience]] = None  # Structured tech with experience and level
     level: int = 1
     experience_years: Optional[float] = 0.0
-    experience: Optional[float] = None
     work_mode: WorkMode = WorkMode.OFFICE
     status: EmployeeStatus = EmployeeStatus.ON_BENCH
     bandwidth: int = 100
