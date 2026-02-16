@@ -166,11 +166,15 @@ def read_employees(skip: int = 0, limit: int = 100, db: Session = Depends(get_db
 
 @router.get("/search", response_model=List[schemas.EmployeeResponse])
 def search_employees(query: str = Query(...), db: Session = Depends(get_db)):
-    # Simple search across name, tech, and search_phrase
+    # Expanded search across multiple fields
+    search_filter = f"%{query}%"
     return db.query(models.Employee).filter(
-        (models.Employee.name.ilike(f"%{query}%")) |
-        (models.Employee.tech.ilike(f"%{query}%")) |
-        (models.Employee.search_phrase.ilike(f"%{query}%"))
+        (models.Employee.name.ilike(search_filter)) |
+        (models.Employee.emp_id.ilike(search_filter)) |
+        (models.Employee.location.ilike(search_filter)) |
+        (models.Employee.career_summary.ilike(search_filter)) |
+        (models.Employee.search_phrase.ilike(search_filter)) |
+        (models.Employee.tech.cast(models.Text).ilike(search_filter))
     ).all()
 
 @router.get("/recent", response_model=List[schemas.EmployeeResponse])

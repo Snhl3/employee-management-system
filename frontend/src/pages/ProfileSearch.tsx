@@ -44,7 +44,7 @@ const ProfileSearch = () => {
                     <input
                         type="text"
                         className="form-control border-start-0 ps-0"
-                        placeholder="Search by name, tech (e.g. React, Python), or keywords..."
+                        placeholder="Search by name, ID, tech, location, or keywords..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                     />
