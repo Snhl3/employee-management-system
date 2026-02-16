@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { fetchMyProfile, updateMyProfile, autofillProfile, generateProfileSummary, parseResume } from '../services/api';
+import { fetchMyProfile, updateMyProfile, autofillProfile, generateProfileSummary, parseResume, fetchEmployeeById, updateEmployee, fetchAuthMe, createEmployee } from '../services/api';
+import { useParams, useNavigate } from 'react-router-dom';
 import './MyProfile.css';
 
 interface TechExperience {
@@ -44,7 +45,10 @@ interface ProfileData {
 }
 
 const MyProfile = () => {
+    const { empId } = useParams<{ empId?: string }>();
+    const navigate = useNavigate();
     const [profile, setProfile] = useState<ProfileData | null>(null);
+    const [currentUser, setCurrentUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [autofilling, setAutofilling] = useState(false);
@@ -58,25 +62,34 @@ const MyProfile = () => {
     const [parsingResume, setParsingResume] = useState(false);
 
     useEffect(() => {
-        const loadProfile = async () => {
+        const loadInitialData = async () => {
             try {
-                const data = await fetchMyProfile();
+                const user = await fetchAuthMe();
+                setCurrentUser(user);
+
+                let data;
+                if (empId) {
+                    data = await fetchEmployeeById(empId);
+                } else {
+                    data = await fetchMyProfile();
+                }
+
                 // Ensure tech is always an array
                 if (!data.tech || !Array.isArray(data.tech)) {
                     data.tech = [];
                 }
-                // Ensure work_history and education are arrays
                 if (!data.work_history) data.work_history = [];
                 if (!data.education) data.education = [];
                 setProfile(data);
             } catch (error) {
                 console.error('Failed to load profile', error);
+                setMessage('Failed to load profile. It may not exist.');
             } finally {
                 setLoading(false);
             }
         };
-        loadProfile();
-    }, []);
+        loadInitialData();
+    }, [empId]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -129,30 +142,68 @@ const MyProfile = () => {
         setProfile({ ...profile, education: newEducation });
     };
 
-    const handleSave = async (e?: React.FormEvent) => {
+    const handleSave = async (dataToSave?: ProfileData, e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!profile) return;
+        const profileToSave = dataToSave || profile;
+        if (!profileToSave) return;
+
         setSaving(true);
         try {
             // Sanitize data before sending
             const sanitizedProfile = {
-                ...profile,
-                work_history: profile.work_history.map(h => ({
+                ...profileToSave,
+                work_history: profileToSave.work_history.map(h => ({
                     ...h,
                     start_date: h.start_date || null,
                     end_date: h.end_date || null
                 })),
-                education: profile.education.map(edu => ({
+                education: profileToSave.education.map(edu => ({
                     ...edu,
                     graduation_year: edu.graduation_year || null
                 }))
             };
-            await updateMyProfile(sanitizedProfile);
+            if (empId) {
+                await updateEmployee(empId, sanitizedProfile);
+            } else {
+                await updateMyProfile(sanitizedProfile);
+            }
             setMessage('Profile saved successfully!');
             setTimeout(() => setMessage(''), 3000);
         } catch (error: any) {
             console.error('Save failed:', error);
             setMessage(error.message || 'Failed to update profile.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleCreate = async () => {
+        if (!currentUser) return;
+        setSaving(true);
+        try {
+            const newProfileData: ProfileData = {
+                emp_id: `EMP${Math.floor(Math.random() * 10000)}`,
+                name: currentUser.name || 'New Profile',
+                email: currentUser.email,
+                phone: '',
+                location: '',
+                tech: [],
+                level: 1,
+                experience_years: 0,
+                work_mode: 'OFFICE',
+                status: 'ON_BENCH',
+                bandwidth: 100,
+                career_summary: '',
+                search_phrase: '',
+                work_history: [],
+                education: []
+            };
+            const newProfile = await createEmployee(newProfileData);
+            setProfile(newProfile);
+            setMessage('Profile created successfully! You can now edit it.');
+        } catch (error: any) {
+            console.error('Create failed:', error);
+            setMessage(error.message || 'Failed to create profile.');
         } finally {
             setSaving(false);
         }
@@ -217,7 +268,9 @@ const MyProfile = () => {
         if (aiGeneratedData) {
             setProfile(aiGeneratedData);
             setShowAIPreview(false);
-            setMessage('AI data applied! Review and save.');
+            // Hard Guard: Save immediately to database
+            handleSave(aiGeneratedData);
+            setMessage('AI data confirmed and saved to database!');
             setTimeout(() => setMessage(''), 5000);
         }
     };
@@ -243,7 +296,24 @@ const MyProfile = () => {
     };
 
     if (loading) return <div className="text-center mt-5"><div className="spinner-border text-primary" role="status"></div></div>;
-    if (!profile) return <div className="alert alert-danger">Failed to load profile.</div>;
+
+    if (!profile) return (
+        <div className="container mt-5 text-center">
+            <div className="card shadow-sm border-0 py-5">
+                <div className="card-body">
+                    <i className="bi bi-person-x fs-1 mb-3 d-block text-muted"></i>
+                    <h4 className="fw-bold">No Profile Found</h4>
+                    <p className="text-muted mb-4">This user does not have an employee profile yet.</p>
+                    {(!empId || currentUser?.role === 'ADMIN') && (
+                        <button className="btn btn-primary px-4 fw-bold" onClick={handleCreate} disabled={saving}>
+                            {saving ? <span className="spinner-border spinner-border-sm me-2"></span> : <i className="bi bi-person-plus-fill me-2"></i>}
+                            Create Employee Profile
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div className="container-fluid py-4">
@@ -563,9 +633,6 @@ const MyProfile = () => {
                         <div className="card-body p-4">
                             <div className="d-flex justify-content-between align-items-center mb-2">
                                 <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1 mb-0">Career Summary</h5>
-                                <button type="button" className="btn btn-link text-decoration-none btn-sm p-0" onClick={handleGenerateSummary} disabled={generatingSummary}>
-                                    {generatingSummary ? 'Generating...' : '✨ Auto-generate'}
-                                </button>
                             </div>
                             <textarea name="career_summary" className="form-control mb-4" rows={4} value={profile.career_summary} onChange={handleChange} placeholder="Professional summary..."></textarea>
 

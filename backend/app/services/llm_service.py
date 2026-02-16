@@ -46,23 +46,22 @@ class LLMService:
         response = client.chat.completions.create(
             model=self.settings.model_name,
             messages=[
-                {"role": "system", "content": "You are a professional HR assistant. Output JSON only."},
+                {"role": "system", "content": "You are a strict structured data extractor. Output JSON only."},
                 {"role": "user", "content": prompt}
             ],
-            response_format={ "type": "json_object" }
+            response_format={ "type": "json_object" },
+            temperature=0,
+            top_p=0,
+            frequency_penalty=0,
+            presence_penalty=0
         )
         return json.loads(response.choices[0].message.content)
 
     def _generate_ollama_profile(self, partial_data: str) -> dict:
-        import requests
         api_base = self.settings.api_base or "http://localhost:11434/v1"
-        # Ensure api_base doesn't end with slash if we append /chat/completions manually, 
-        # but OpenAI client handles it if we use that. 
-        # Actually, let's use OpenAI client pointed to Ollama for compatibility!
-        
         client = OpenAI(
             base_url=api_base,
-            api_key="ollama", # required but ignored
+            api_key="ollama", 
         )
         
         prompt = self._get_profile_prompt(partial_data)
@@ -71,11 +70,14 @@ class LLMService:
             response = client.chat.completions.create(
                 model=self.settings.model_name,
                 messages=[
-                    {"role": "system", "content": "You are a professional HR assistant. Output valid JSON."},
+                    {"role": "system", "content": "You are a strict structured data extractor. Output valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
-                # Ollama JSON mode might vary, but let's try standard response_format
-                response_format={ "type": "json_object" }
+                response_format={ "type": "json_object" },
+                temperature=0,
+                top_p=0,
+                frequency_penalty=0,
+                presence_penalty=0
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
@@ -117,13 +119,31 @@ class LLMService:
 
     def _get_profile_prompt(self, partial_data: str) -> str:
         return f"""
-        You are an AI assistant helping to complete an employee profile.
-        Given the following text, extract and generate a structured JSON object.
+        You are a strict structured data extractor.
+        Your job is to extract and map explicitly mentioned information from the provided text into predefined profile fields.
+        
+        ### EXTRACTION RULES:
+        1. Extract ONLY information explicitly present in user input.
+        2. Map extracted information to correct profile fields.
+        3. DO NOT invent, enrich, assume, or expand anything.
+        4. DO NOT rewrite or improve grammar.
+        5. DO NOT inject default technologies.
+        6. DO NOT assume experience if not mentioned.
+        7. DO NOT fabricate company names or education.
+        8. If information is missing → leave that field empty.
+        
+        ### FIELD MAPPING RULES:
+        - **Identity**: Name, Email, Phone, Location. Extract exactly as written.
+        - **Technologies**: Extract ONLY if mentioned with experience years/level. If no years/level mentioned, DO NOT include tech.
+        - **Work History**: Company, Role, Duration, Responsibilities. Use EXACT wording. Do NOT summarize.
+        - **Education**: Degree, Institution, Year.
+        - **Career Summary**: Extract ONLY the specific "Professional Summary", "Profile", or "Objective" section of the input. DO NOT include job roles, company names, technology lists, or education details in this field. If no dedicated summary is provided, leave this field EMPTY.
+        - **Search Phrase**: If user provides a short summary → use that. If not provided → generate short phrase ONLY from existing extracted data (Name - Role).
         
         Input Text:
         {partial_data}
         
-        JSON Structure (Return ONLY JSON):
+        Return structured JSON only:
         {{
             "name": "...",
             "email": "...",
@@ -131,29 +151,24 @@ class LLMService:
             "location": "...",
             "tech": [
                 {{
-                    "tech": "Python",
-                    "experience_years": 4.0,
-                    "level": "Advanced"
-                }},
-                {{
-                    "tech": "React",
-                    "experience_years": 2.0,
-                    "level": "Intermediate"
+                    "tech": "...",
+                    "experience_years": float,
+                    "level": "..."
                 }}
             ],
-            "level": int (1-10),
+            "level": int,
             "experience_years": float,
-            "work_mode": "REMOTE" or "OFFICE",
-            "status": "ON_BENCH" or "ON_CLIENT",
-            "bandwidth": int (0-100),
+            "work_mode": "REMOTE" | "OFFICE" | "HYBRID",
+            "status": "ON_BENCH" | "ON_CLIENT",
+            "bandwidth": int,
             "career_summary": "...",
             "search_phrase": "...",
             "work_history": [
                 {{
                     "company": "...",
                     "role": "...",
-                    "start_date": "YYYY-MM-DD",
-                    "end_date": "YYYY-MM-DD" or null,
+                    "start_date": "...",
+                    "end_date": "...",
                     "project": "...",
                     "description": "..."
                 }}
@@ -167,9 +182,6 @@ class LLMService:
                 }}
             ]
         }}
-        
-        IMPORTANT: For "tech", extract technology names with estimated experience years and proficiency level.
-        Level must be one of: "Beginner", "Intermediate", "Advanced", "Expert"
         """
 
     def _get_summary_prompt(self, profile_data: dict) -> str:
@@ -179,78 +191,35 @@ class LLMService:
         """
 
     def _generate_mock_profile(self, partial_data: str) -> dict:
-        """Fallback mock generator"""
-        # ... (Existing Mock Logic) ...
+        """Fallback mock generator - Neutralized for zero hallucination"""
         try:
-            data = json.loads(partial_data)
-            name = data.get("name", "Mock User")
+            data = json.loads(partial_data) if partial_data.startswith('{') else {"career_summary": partial_data}
+            name = data.get("name", "")
             summary = data.get("career_summary", "")
         except:
-            name = "Mock User"
-            summary = ""
-
-        first_name = name.split()[0] if name else "User"
+            name = ""
+            summary = partial_data if partial_data else ""
         
         return {
             "name": name,
-            "email": f"{first_name.lower()}@example.com",
-            # ... rest of mock data ...
-            "phone": "+1 (555) 0123-456",
-            "location": "San Francisco, CA",
-            "tech": [
-                {"tech": "Python", "experience_years": 4.0, "level": "Advanced"},
-                {"tech": "React", "experience_years": 3.0, "level": "Advanced"},
-                {"tech": "FastAPI", "experience_years": 2.5, "level": "Intermediate"},
-                {"tech": "TypeScript", "experience_years": 3.0, "level": "Advanced"},
-                {"tech": "AWS", "experience_years": 2.0, "level": "Intermediate"},
-                {"tech": "Docker", "experience_years": 2.0, "level": "Intermediate"},
-                {"tech": "PostgreSQL", "experience_years": 3.5, "level": "Advanced"},
-                {"tech": "Redis", "experience_years": 1.5, "level": "Beginner"}
-            ],
-            "level": 7,
-            "experience_years": 5.5,
-            "work_mode": "REMOTE",
-            "status": "ON_CLIENT",
+            "email": "",
+            "phone": "",
+            "location": "",
+            "tech": [],
+            "level": 1,
+            "experience_years": 0.0,
+            "work_mode": "OFFICE",
+            "status": "ON_BENCH",
             "bandwidth": 100,
-            "career_summary": summary or f"Experienced {name} with a demonstrated history of working in the software industry. Skilled in React, Python, and Cloud technologies.",
-            "search_phrase": f"{name} Full Stack Developer React Python",
-            "work_history": [
-                {
-                    "company": "Tech Corp Inc.",
-                    "role": "Senior Developer",
-                    "start_date": "2021-01-15",
-                    "end_date": None,
-                    "project": "Cloud Migration",
-                    "description": "Leading the migration of legacy monoliths to microservices architecture using FastAPI and AWS."
-                },
-                {
-                    "company": "StartupX",
-                    "role": "Software Engineer",
-                    "start_date": "2018-06-01",
-                    "end_date": "2020-12-31",
-                    "project": "MVP Development",
-                    "description": "Developed the initial MVP using React and Node.js. Optimized database queries reducing load times by 40%."
-                }
-            ],
-            "education": [
-                {
-                    "institution": "University of Technology",
-                    "degree": "Bachelor of Science",
-                    "field_of_study": "Computer Science",
-                    "graduation_year": 2018
-                }
-            ]
+            "career_summary": summary,
+            "search_phrase": "",
+            "work_history": [],
+            "education": []
         }
 
     def _generate_mock_summary(self, profile_data: dict) -> str:
-        # ... (Existing Mock Logic) ...
-        name = profile_data.get("name", "The professional")
-        tech = profile_data.get("tech", "modern technologies")
-        role = "Software Engineer"
-        if profile_data.get("work_history"):
-             role = profile_data["work_history"][0].get("role", "Software Engineer")
-             
-        return f"{name} is a highly engaged {role} specializing in {tech}. They have a strong track record of delivering high-quality solutions and driving technical excellence. Proven ability to adapt to new challenges and collaborate effectively in dynamic environments."
+        """Neutralized mock summary"""
+        return profile_data.get("career_summary", "")
 
     def fetch_available_models(self, provider: str) -> list:
         provider = provider.lower()

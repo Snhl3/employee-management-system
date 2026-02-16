@@ -55,6 +55,7 @@ function App() {
                                 <Routes>
                                     <Route path="/" element={<Dashboard />} />
                                     <Route path="/my-profile" element={<MyProfile />} />
+                                    <Route path="/profile/:empId" element={<MyProfile />} />
                                     <Route path="/search" element={<ProfileSearch />} />
                                     <Route path="/users" element={<UserManagement />} />
                                     <Route path="/settings" element={<LLMSettings />} />

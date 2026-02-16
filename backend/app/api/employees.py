@@ -12,7 +12,7 @@ from ..models import work_history as history_models
 from ..models import education as edu_models
 from ..schemas import employee as schemas
 from .auth_utils import get_current_user
-from ..models.user import User
+from ..models.user import User, UserRole
 from ..services.llm_service import LLMService
 
 router = APIRouter(prefix="/employees", tags=["employees"])
@@ -43,10 +43,20 @@ def update_employee(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # In a real app, check for admin privileges here
+    # Admins can edit any profile. Regular users can only edit their own profile (if emp_id matches or via /me endpoint).
     db_employee = db.query(models.Employee).filter(models.Employee.emp_id == emp_id).first()
     if db_employee is None:
         raise HTTPException(status_code=404, detail="Employee not found")
+
+    if current_user.role != UserRole.ADMIN:
+        # Check if the employee record belongs to the current user
+        if db_employee.email != current_user.email:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to edit this profile."
+            )
+    
+    print(f"DEBUG: Admin {current_user.email} is editing profile {db_employee.email}")
 
     return update_employee_record(db_employee, employee_update, db)
 

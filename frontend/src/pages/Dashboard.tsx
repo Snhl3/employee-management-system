@@ -1,17 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { fetchMetrics, fetchRecentProfiles } from '../services/api';
+import { fetchMetrics, fetchRecentProfiles, fetchAuthMe } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 
 const Dashboard = () => {
+    const navigate = useNavigate();
     const [metrics, setMetrics] = useState<any>(null);
     const [recentProfiles, setRecentProfiles] = useState<any[]>([]);
+    const [currentUser, setCurrentUser] = useState<any>(null);
 
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [m, rp] = await Promise.all([fetchMetrics(), fetchRecentProfiles()]);
+                const [m, rp, user] = await Promise.all([fetchMetrics(), fetchRecentProfiles(), fetchAuthMe()]);
                 setMetrics(m);
                 setRecentProfiles(rp);
+                setCurrentUser(user);
             } catch (error) {
                 console.error('Error loading dashboard data:', error);
             }
@@ -88,9 +92,20 @@ const Dashboard = () => {
                                             </small>
                                         </div>
                                     </div>
-                                    <span className={`badge rounded-pill ${p.status?.toLowerCase() === 'on_bench' ? 'bg-warning' : 'bg-success'}`}>
-                                        {p.status?.replace('_', ' ')}
-                                    </span>
+                                    <div className="d-flex align-items-center gap-3">
+                                        <span className={`badge rounded-pill ${p.status?.toLowerCase() === 'on_bench' ? 'bg-warning' : 'bg-success'}`}>
+                                            {p.status?.replace('_', ' ')}
+                                        </span>
+                                        {currentUser?.role === 'ADMIN' && (
+                                            <button
+                                                className="btn btn-sm btn-outline-primary"
+                                                onClick={() => navigate(`/profile/${p.emp_id}`)}
+                                                title="Edit Profile"
+                                            >
+                                                <i className="bi bi-pencil"></i>
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             )) : <div className="p-4 text-center text-muted">No profiles updated recently.</div>}
                         </div>

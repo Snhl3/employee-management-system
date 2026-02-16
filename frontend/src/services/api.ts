@@ -44,7 +44,16 @@ api.interceptors.response.use(
 // Helper function to handle API errors consistently
 const handleApiError = (error: any, context: string) => {
     console.error(`[${context}] Error:`, error);
-    const message = error.response?.data?.detail || error.message || 'An unexpected error occurred';
+    let detail = error.response?.data?.detail;
+
+    // Handle list of error objects (common in Pydantic validation errors)
+    if (Array.isArray(detail)) {
+        detail = detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join(', ');
+    } else if (typeof detail === 'object' && detail !== null) {
+        detail = JSON.stringify(detail);
+    }
+
+    const message = detail || error.message || 'An unexpected error occurred';
     throw new Error(message);
 };
 
@@ -135,6 +144,15 @@ export const fetchMyProfile = async () => {
     }
 };
 
+export const fetchAuthMe = async () => {
+    try {
+        const response = await api.get('/auth/me');
+        return response.data;
+    } catch (error) {
+        handleApiError(error, 'Fetch Auth Me');
+    }
+};
+
 export const updateMyProfile = async (profileData: any) => {
     try {
         const response = await api.put('/employees/me', profileData);
@@ -150,6 +168,24 @@ export const updateEmployee = async (empId: string, profileData: any) => {
         return response.data;
     } catch (error) {
         handleApiError(error, 'Update Employee');
+    }
+};
+
+export const createEmployee = async (profileData: any) => {
+    try {
+        const response = await api.post('/employees', profileData);
+        return response.data;
+    } catch (error) {
+        handleApiError(error, 'Create Employee');
+    }
+};
+
+export const fetchEmployeeById = async (empId: string) => {
+    try {
+        const response = await api.get(`/employees/${empId}`);
+        return response.data;
+    } catch (error) {
+        handleApiError(error, 'Fetch Employee By Id');
     }
 };
 
@@ -220,6 +256,15 @@ export const updateUserStatus = async (userId: number, isActive: boolean) => {
         return response.data;
     } catch (error) {
         handleApiError(error, 'Update User Status');
+    }
+};
+
+export const updateUser = async (userId: number, userData: any) => {
+    try {
+        const response = await api.patch(`/users/${userId}`, userData);
+        return response.data;
+    } catch (error) {
+        handleApiError(error, 'Update User');
     }
 };
 

@@ -1,11 +1,19 @@
 import React, { useState } from 'react';
-import { searchEmployees } from '../services/api';
+import { searchEmployees, fetchAuthMe } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import './ProfileSearch.css';
 
 const ProfileSearch = () => {
+    const navigate = useNavigate();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [currentUser, setCurrentUser] = useState<any>(null);
+
+    useEffect(() => {
+        fetchAuthMe().then(setCurrentUser).catch(console.error);
+    }, []);
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -70,9 +78,17 @@ const ProfileSearch = () => {
                                             <span><i className="bi bi-geo-alt me-1"></i>{p.location || 'Remote'}</span>
                                             <span><i className="bi bi-clock me-1"></i>{p.experience_years} Years</span>
                                         </div>
-                                        <div className="card-text small text-muted text-truncate-2">
+                                        <div className="card-text small text-muted text-truncate-2 mb-3">
                                             {p.career_summary || 'No career summary provided.'}
                                         </div>
+                                        {currentUser?.role === 'ADMIN' && (
+                                            <button
+                                                className="btn btn-sm btn-outline-primary w-100"
+                                                onClick={() => navigate(`/profile/${p.emp_id}`)}
+                                            >
+                                                <i className="bi bi-pencil me-1"></i> Edit Profile
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
