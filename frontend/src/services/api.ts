@@ -218,7 +218,16 @@ export const generateProfileSummary = async () => {
         const response = await api.post('/employees/generate-summary');
         return response.data;
     } catch (error) {
-        handleApiError(error, 'Generate Profile Summary');
+        handleApiError(error, 'Generate Summary');
+    }
+};
+
+export const generateSearchPhrase = async (profileData: any) => {
+    try {
+        const response = await api.post('/employees/generate-search-phrase', profileData);
+        return response.data;
+    } catch (error) {
+        handleApiError(error, 'Generate Search Phrase');
     }
 };
 

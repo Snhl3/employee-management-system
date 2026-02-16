@@ -26,6 +26,82 @@ class LLMService:
             # Default to Mock
             return self._generate_mock_profile(partial_data)
 
+    def generate_search_phrase(self, profile_data: dict) -> str:
+        provider = self.settings.provider.lower()
+        if provider == "ollama":
+            return self._generate_ollama_search_phrase(profile_data)
+        elif provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                return self._generate_mock_search_phrase(profile_data)
+            return self._generate_openai_search_phrase(profile_data, api_key)
+        else:
+            return self._generate_mock_search_phrase(profile_data)
+
+    def _generate_openai_search_phrase(self, profile_data: dict, api_key: str) -> str:
+        client = OpenAI(api_key=api_key)
+        prompt = self._get_search_phrase_prompt(profile_data)
+        response = client.chat.completions.create(
+            model=self.settings.model_name,
+            messages=[
+                {"role": "system", "content": "You are a concise indexing assistant."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        return response.choices[0].message.content.strip()
+
+    def _generate_ollama_search_phrase(self, profile_data: dict) -> str:
+        api_base = self.settings.api_base or "http://localhost:11434/v1"
+        client = OpenAI(base_url=api_base, api_key="ollama")
+        prompt = self._get_search_phrase_prompt(profile_data)
+        try:
+            response = client.chat.completions.create(
+                model=self.settings.model_name,
+                messages=[
+                    {"role": "system", "content": "You are a concise indexing assistant."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return self._generate_mock_search_phrase(profile_data)
+
+    def _generate_mock_search_phrase(self, profile_data: dict) -> str:
+        name = profile_data.get("name", "Unknown")
+        emp_id = profile_data.get("emp_id", "No ID")
+        location = profile_data.get("location", "No Location")
+        status = profile_data.get("status", "Unknown Status")
+        work_mode = profile_data.get("work_mode", "Unknown Mode")
+        exp = profile_data.get("experience_years", 0)
+        tech_list = [t["tech"] for t in profile_data.get("tech", [])[:3]]
+        tech_str = ", ".join(tech_list) if tech_list else "Generalist"
+        
+        # History & Keyword analysis
+        history = profile_data.get("work_history", [])
+        history_str = ""
+        keywords = []
+        # Target specific models and roles
+        target_keywords = ["arima", "random forest", "xgboost", "data analyst", "data scientist", "ml engineer", "ai engineer", "genai", "llm", "bert", "transformer", "sql"]
+        
+        if history:
+            projects = [h.get("project") for h in history if h.get("project")]
+            roles = [h.get("role") for h in history if h.get("role")]
+            
+            for h in history:
+                desc = (h.get("description") or "").lower()
+                for kw in target_keywords:
+                    if kw in desc and kw.title() not in [k.title() for k in keywords]:
+                        keywords.append(kw.upper() if len(kw) <= 3 else kw.title())
+            
+            history_parts = []
+            if roles: history_parts.append(f"Roles: {', '.join(roles[:2])}")
+            if projects: history_parts.append(f"Projects: {', '.join(projects[:2])}")
+            if keywords: history_parts.append(f"Models/Spec: {', '.join(keywords)}")
+            
+            history_str = f" Previously: {' | '.join(history_parts)}."
+
+        return f"{name} ({emp_id}) - {location} - {status} ({work_mode}) - {exp}yrs Exp in {tech_str}.{history_str}"
+
     def generate_profile_summary(self, profile_data: dict) -> str:
         provider = self.settings.provider.lower()
         
@@ -125,20 +201,20 @@ class LLMService:
         ### EXTRACTION RULES:
         1. Extract ONLY information explicitly present in user input.
         2. Map extracted information to correct profile fields.
-        3. DO NOT invent, enrich, assume, or expand anything.
+        3. DO NOT invent, enrich, assume, or expand anything. STRICTLY NO HALLUCINATION.
         4. DO NOT rewrite or improve grammar.
         5. DO NOT inject default technologies.
-        6. DO NOT assume experience if not mentioned.
+        6. DO NOT assume experience if not mentioned. If user says "3 years in SQL", map SQL to tech experience and 3.0 to top-level experience_years.
         7. DO NOT fabricate company names or education.
         8. If information is missing → leave that field empty.
         
         ### FIELD MAPPING RULES:
         - **Identity**: Name, Email, Phone, Location. Extract exactly as written.
         - **Technologies**: Extract ONLY if mentioned with experience years/level. If no years/level mentioned, DO NOT include tech.
-        - **Work History**: Company, Role, Duration, Responsibilities. Use EXACT wording. Do NOT summarize.
+        - **Work History**: Company, Role, Duration, Project Name, Responsibilities. Use EXACT wording. Do NOT summarize. **STRICTLY extract specific models (e.g. ARIMA, XGBoost), platforms, and methods mentioned.**
         - **Education**: Degree, Institution, Year.
         - **Career Summary**: Extract ONLY the specific "Professional Summary", "Profile", or "Objective" section of the input. DO NOT include job roles, company names, technology lists, or education details in this field. If no dedicated summary is provided, leave this field EMPTY.
-        - **Search Phrase**: If user provides a short summary → use that. If not provided → generate short phrase ONLY from existing extracted data (Name - Role).
+        - **Search Phrase**: If user provides a short summary → use that. If not provided → leave EMPTY.
         
         Input Text:
         {partial_data}
@@ -182,6 +258,42 @@ class LLMService:
                 }}
             ]
         }}
+        """
+
+    def _get_search_phrase_prompt(self, profile_data: dict) -> str:
+        # Format history details for prompt
+        history_details = []
+        for h in profile_data.get('work_history', []):
+            detail = f"- Role: {h.get('role')}"
+            if h.get('project'):
+                detail += f", Project: {h.get('project')}"
+            if h.get('description'):
+                detail += f", Work Summary: {h.get('description')}"
+            history_details.append(detail)
+        
+        history_str = "\n".join(history_details[:5])
+
+        return f"""
+        Generate a concise indexing search phrase (one short sentence) for this employee:
+        - Name: {profile_data.get('name')}
+        - Employee ID: {profile_data.get('emp_id')}
+        - Technologies: {', '.join([t.get('tech') for t in profile_data.get('tech', [])])}
+        - Location: {profile_data.get('location')}
+        - Current Status: {profile_data.get('status')}
+        - Work Mode: {profile_data.get('work_mode')}
+        - Total Experience: {profile_data.get('experience_years')} years
+        
+        Detailed Work History (Scan for models, roles, and project details):
+        {history_str}
+        
+        ### INSTRUCTIONS:
+        1. The phrase should be conversational but DENSE with keywords for search.
+        2. Specifically, extract and include roles and models from the description: e.g. Data Analyst, Data Scientist, AI Engineer, ML Engineer, GenAI, LLM.
+        3. **MUST include specific models used (e.g. ARIMA, Random Forest, XGBoost, GPT-4) and Project Names.**
+        4. Include Work Mode and Status if they add clarity for recruiters.
+        
+        Example: "John Doe (EMP123), Senior AI Engineer based in Mumbai (REMOTE), with 10 years experience including 'Energy Optimization' using ARIMA and XGBoost models."
+        Example: "John Doe (EMP123), Senior AI Engineer based in Mumbai, currently ON_BENCH (HYBRID), with 10 years experience in GenAI/LLM, previously worked on 'Project Alpha' using GPT-4 models at Google."
         """
 
     def _get_summary_prompt(self, profile_data: dict) -> str:

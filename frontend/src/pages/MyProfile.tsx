@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { fetchMyProfile, updateMyProfile, autofillProfile, generateProfileSummary, parseResume, fetchEmployeeById, updateEmployee, fetchAuthMe, createEmployee } from '../services/api';
+import { fetchMyProfile, updateMyProfile, autofillProfile, generateProfileSummary, parseResume, fetchEmployeeById, updateEmployee, fetchAuthMe, createEmployee, generateSearchPhrase } from '../services/api';
 import { useParams, useNavigate } from 'react-router-dom';
 import './MyProfile.css';
 
@@ -250,8 +250,33 @@ const MyProfile = () => {
                 throw new Error('Invalid AI response');
             }
 
-            // Show preview modal instead of directly applying
-            setAiGeneratedData({ ...profile, ...response });
+            // Smart Merge: Only take non-empty fields from AI response
+            const mergedProfile = { ...profile };
+
+            // Flat fields
+            const fieldsToMerge: (keyof ProfileData)[] = ['phone', 'location', 'level', 'experience_years', 'work_mode', 'status', 'bandwidth', 'career_summary', 'search_phrase'];
+            fieldsToMerge.forEach(field => {
+                const val = (response as any)[field];
+                if (val !== undefined && val !== "" && val !== 0 && val !== null) {
+                    (mergedProfile as any)[field] = val;
+                }
+            });
+
+            // Name - only update if non-empty
+            if (response.name) mergedProfile.name = response.name;
+
+            // Arrays - append new items
+            if (response.tech && response.tech.length > 0) {
+                mergedProfile.tech = [...mergedProfile.tech, ...response.tech];
+            }
+            if (response.work_history && response.work_history.length > 0) {
+                mergedProfile.work_history = [...mergedProfile.work_history, ...response.work_history];
+            }
+            if (response.education && response.education.length > 0) {
+                mergedProfile.education = [...mergedProfile.education, ...response.education];
+            }
+
+            setAiGeneratedData(mergedProfile);
             setShowAIPreview(true);
             setShowParseModal(false); // Close the input modal
             setParseText(''); // Clear text
@@ -292,6 +317,21 @@ const MyProfile = () => {
             setMessage('Failed to generate summary.');
         } finally {
             setGeneratingSummary(false);
+        }
+    };
+
+    const handleGenerateSearchPhrase = async () => {
+        if (!profile) return;
+        setAutofilling(true);
+        try {
+            const result = await generateSearchPhrase(profile);
+            setProfile({ ...profile, search_phrase: result.search_phrase });
+            setMessage('Search phrase generated!');
+            setTimeout(() => setMessage(''), 5000);
+        } catch (error) {
+            setMessage('Failed to generate search phrase.');
+        } finally {
+            setAutofilling(false);
         }
     };
 
@@ -391,7 +431,17 @@ const MyProfile = () => {
             <header className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h1 className="fw-bold text-uppercase mb-0 display-6">{profile.name}</h1>
-                    <span className="text-muted fs-5">ID: <strong className="text-dark">{profile.emp_id}</strong></span>
+                    <div className="d-flex align-items-center mt-1">
+                        <span className="text-muted fs-5 me-2">Employee ID:</span>
+                        <input
+                            type="text"
+                            name="emp_id"
+                            className="form-control form-control-sm fw-bold border-primary shadow-sm"
+                            style={{ width: '150px' }}
+                            value={profile.emp_id}
+                            onChange={handleChange}
+                        />
+                    </div>
                 </div>
                 <div className="d-flex gap-2">
                     <input
@@ -636,7 +686,17 @@ const MyProfile = () => {
                             </div>
                             <textarea name="career_summary" className="form-control mb-4" rows={4} value={profile.career_summary} onChange={handleChange} placeholder="Professional summary..."></textarea>
 
-                            <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1 mb-2">Search Phrase</h5>
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                                <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1 mb-0">Search Phrase</h5>
+                                <button
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={handleGenerateSearchPhrase}
+                                    disabled={autofilling}
+                                >
+                                    {autofilling ? <span className="spinner-border spinner-border-sm me-1"></span> : <i className="bi bi-magic me-1"></i>}
+                                    Generate
+                                </button>
+                            </div>
                             <input type="text" name="search_phrase" className="form-control" value={profile.search_phrase} onChange={handleChange} placeholder="Short searchable summary..." />
                         </div>
                     </div>

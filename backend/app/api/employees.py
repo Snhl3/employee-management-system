@@ -136,6 +136,15 @@ def generate_summary(current_user: User = Depends(get_current_user), db: Session
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/generate-search-phrase")
+def generate_search_phrase(profile_data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    llm_service = LLMService(db)
+    try:
+        phrase = llm_service.generate_search_phrase(profile_data)
+        return {"search_phrase": phrase}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/", response_model=schemas.EmployeeResponse)
 def create_employee(employee: schemas.EmployeeCreate, db: Session = Depends(get_db)):
     db_employee = models.Employee(**employee.dict(exclude={"work_history", "education"}))
