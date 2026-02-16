@@ -75,7 +75,7 @@ const Dashboard = () => {
             <section className="recent-section">
                 <div className="card border-0 shadow-sm">
                     <div className="card-header bg-white py-3">
-                        <h5 className="mb-0 fw-bold">Recently Updated Profiles</h5>
+                        <h5 className="mb-0 fw-bold">Recently Added Profiles</h5>
                     </div>
                     <div className="card-body p-0">
                         <div className="list-group list-group-flush">
@@ -96,15 +96,6 @@ const Dashboard = () => {
                                         <span className={`badge rounded-pill ${p.status?.toLowerCase() === 'on_bench' ? 'bg-warning' : 'bg-success'}`}>
                                             {p.status?.replace('_', ' ')}
                                         </span>
-                                        {currentUser?.role === 'ADMIN' && (
-                                            <button
-                                                className="btn btn-sm btn-outline-primary"
-                                                onClick={() => navigate(`/profile/${p.emp_id}`)}
-                                                title="Edit Profile"
-                                            >
-                                                <i className="bi bi-pencil"></i>
-                                            </button>
-                                        )}
                                     </div>
                                 </div>
                             )) : <div className="p-4 text-center text-muted">No profiles updated recently.</div>}

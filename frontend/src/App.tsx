@@ -8,20 +8,30 @@ import LLMSettings from './pages/LLMSettings';
 import UserManagement from './pages/UserManagement';
 import MyProfile from './pages/MyProfile';
 import Login from './pages/Login';
+import { fetchAuthMe } from './services/api';
 import './styles/theme.css';
 
 function App() {
     const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+    const [user, setUser] = useState<any>(null);
     const [isChecking, setIsChecking] = useState(true);
 
     useEffect(() => {
         // Sync token state on mount and on storage changes (helpful for multi-tab)
-        const checkToken = () => {
+        const checkToken = async () => {
             const currentToken = localStorage.getItem('token');
             if (currentToken === "null" || currentToken === "undefined" || !currentToken) {
                 setToken(null);
+                setUser(null);
             } else {
                 setToken(currentToken);
+                try {
+                    const userData = await fetchAuthMe();
+                    setUser(userData);
+                } catch (error) {
+                    console.error('App: Failed to fetch user profile:', error);
+                    // If fetching user fails with 401, interceptor will handle it
+                }
             }
             setIsChecking(false);
         };
@@ -57,8 +67,8 @@ function App() {
                                     <Route path="/my-profile" element={<MyProfile />} />
                                     <Route path="/profile/:empId" element={<MyProfile />} />
                                     <Route path="/search" element={<ProfileSearch />} />
-                                    <Route path="/users" element={<UserManagement />} />
-                                    <Route path="/settings" element={<LLMSettings />} />
+                                    <Route path="/users" element={user?.role === 'ADMIN' ? <UserManagement /> : <Navigate to="/" />} />
+                                    <Route path="/settings" element={user?.role === 'ADMIN' ? <LLMSettings /> : <Navigate to="/" />} />
                                     <Route path="*" element={<Navigate to="/" />} />
                                 </Routes>
                             </Layout>

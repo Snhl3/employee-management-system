@@ -30,12 +30,16 @@ api.interceptors.response.use(
     },
     (error) => {
         console.error('[API Response Error]', error.response?.status, error.message);
-        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+        if (error.response && error.response.status === 401) {
             // Check if it's not the login endpoint to avoid infinite loops
             if (!error.config.url.includes('/auth/login')) {
                 localStorage.removeItem('token');
                 window.location.href = '/login';
             }
+        }
+        // 403 (Forbidden) should be handled by the component or just logged, not trigger logout
+        if (error.response && error.response.status === 403) {
+            console.warn('[API Forbidden] User does not have permission for this resource.');
         }
         return Promise.reject(error);
     }

@@ -5,6 +5,8 @@ from ..database import get_db
 from ..models.user import User, UserRole
 from ..schemas.user import UserResponse, UserUpdate, UserCreate
 from .auth_utils import get_admin_user, get_password_hash
+from ..models.employee import Employee
+import uuid
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -35,6 +37,19 @@ def create_user(
     )
     
     db.add(new_user)
+    
+    # Auto-create Employee profile if not exists
+    existing_employee = db.query(Employee).filter(Employee.email == user_in.email).first()
+    if not existing_employee:
+        emp_id = f"EMP-{str(uuid.uuid4())[:8].upper()}"
+        new_employee = Employee(
+            emp_id=emp_id,
+            name=user_in.name,
+            email=user_in.email,
+            status="ON_BENCH"
+        )
+        db.add(new_employee)
+    
     db.commit()
     db.refresh(new_user)
     return new_user
@@ -105,6 +120,11 @@ def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Admin cannot delete their own account."
         )
+    
+    # Also delete corresponding employee profile to prevent orphans/duplicates
+    employee = db.query(Employee).filter(Employee.email == user.email).first()
+    if employee:
+        db.delete(employee)
     
     db.delete(user)
     db.commit()

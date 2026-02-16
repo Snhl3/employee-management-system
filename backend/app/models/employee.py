@@ -7,6 +7,7 @@ from ..database import Base
 class WorkMode(str, enum.Enum):
     REMOTE = "REMOTE"
     OFFICE = "OFFICE"
+    HYBRID = "HYBRID"
 
 class EmployeeStatus(str, enum.Enum):
     ON_BENCH = "ON_BENCH"
@@ -29,6 +30,7 @@ class Employee(Base):
     bandwidth = Column(Integer, default=100) # Percentage
     career_summary = Column(Text)
     search_phrase = Column(Text) # For AI-driven search indexing
+    created_at = Column(DateTime, default=datetime.utcnow)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     work_history = relationship("WorkHistory", back_populates="employee", cascade="all, delete-orphan")

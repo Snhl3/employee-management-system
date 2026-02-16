@@ -179,7 +179,8 @@ def search_employees(query: str = Query(...), db: Session = Depends(get_db)):
 
 @router.get("/recent", response_model=List[schemas.EmployeeResponse])
 def get_recent_updates(limit: int = 5, db: Session = Depends(get_db)):
-    return db.query(models.Employee).order_by(models.Employee.last_updated.desc()).limit(limit).all()
+    # Sort by created_at to show recently ADDED profiles
+    return db.query(models.Employee).order_by(models.Employee.created_at.desc()).limit(limit).all()
 
 @router.get("/{emp_id}", response_model=schemas.EmployeeResponse)
 def read_employee(emp_id: str, db: Session = Depends(get_db)):

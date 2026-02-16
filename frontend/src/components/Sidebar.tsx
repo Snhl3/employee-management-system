@@ -1,9 +1,23 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { fetchAuthMe } from '../services/api';
 import './Sidebar.css';
 
 const Sidebar = () => {
     const navigate = useNavigate();
+    const [user, setUser] = React.useState<any>(null);
+
+    React.useEffect(() => {
+        const loadUser = async () => {
+            try {
+                const userData = await fetchAuthMe();
+                setUser(userData);
+            } catch (error) {
+                console.error('Error fetching user for sidebar:', error);
+            }
+        };
+        loadUser();
+    }, []);
 
     const handleLogout = () => {
         localStorage.removeItem('token');
@@ -26,12 +40,16 @@ const Sidebar = () => {
                 <NavLink to="/search" className={({ isActive }) => `nav-link text-white d-flex align-items-center gap-2 ${isActive ? 'active bg-primary' : ''}`}>
                     <i className="bi bi-search"></i> <span>Profile Search</span>
                 </NavLink>
-                <NavLink to="/users" className={({ isActive }) => `nav-link text-white d-flex align-items-center gap-2 ${isActive ? 'active bg-primary' : ''}`}>
-                    <i className="bi bi-people"></i> <span>User Management</span>
-                </NavLink>
-                <NavLink to="/settings" className={({ isActive }) => `nav-link text-white d-flex align-items-center gap-2 ${isActive ? 'active bg-primary' : ''}`}>
-                    <i className="bi bi-gear"></i> <span>LLM Setting</span>
-                </NavLink>
+                {user?.role === 'ADMIN' && (
+                    <>
+                        <NavLink to="/users" className={({ isActive }) => `nav-link text-white d-flex align-items-center gap-2 ${isActive ? 'active bg-primary' : ''}`}>
+                            <i className="bi bi-people"></i> <span>User Management</span>
+                        </NavLink>
+                        <NavLink to="/settings" className={({ isActive }) => `nav-link text-white d-flex align-items-center gap-2 ${isActive ? 'active bg-primary' : ''}`}>
+                            <i className="bi bi-gear"></i> <span>LLM Setting</span>
+                        </NavLink>
+                    </>
+                )}
             </nav>
             <div className="p-3 border-top border-secondary mt-auto">
                 <button
