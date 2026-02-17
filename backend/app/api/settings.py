@@ -27,6 +27,7 @@ def get_llm_settings(db: Session = Depends(get_db)):
         "provider": settings.provider,
         "model_name": settings.model_name,
         "api_base": settings.api_base,
+        "system_prompt": settings.system_prompt,
         "is_api_key_set": bool(settings.api_key),
         "updated_at": settings.updated_at
     }
@@ -40,6 +41,7 @@ def save_llm_settings(settings: schemas.LLMSettingsCreate, db: Session = Depends
         db_settings.provider = settings.provider
         db_settings.model_name = settings.model_name
         db_settings.api_base = settings.api_base
+        db_settings.system_prompt = settings.system_prompt
         if settings.api_key:
             db_settings.api_key = settings.api_key
         db_settings.updated_at = datetime.now()
@@ -55,6 +57,7 @@ def save_llm_settings(settings: schemas.LLMSettingsCreate, db: Session = Depends
         "provider": db_settings.provider,
         "model_name": db_settings.model_name,
         "api_base": db_settings.api_base,
+        "system_prompt": db_settings.system_prompt,
         "is_api_key_set": bool(db_settings.api_key),
         "updated_at": db_settings.updated_at
     }
@@ -62,6 +65,14 @@ def save_llm_settings(settings: schemas.LLMSettingsCreate, db: Session = Depends
 @router.get("/llm/models")
 def get_llm_models(provider: str, db: Session = Depends(get_db)):
     from ..services.llm_service import LLMService
-    llm_service = LLMService(db)
-    models_list = llm_service.fetch_available_models(provider)
-    return models_list
+    try:
+        llm_service = LLMService(db)
+        models_list = llm_service.fetch_available_models(provider)
+        return models_list
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to fetch models: {e}")
+        # Maximum safety fallback
+        if provider.lower() == "openai":
+            return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
+        return ["llama3", "mistral", "phi3", "gemma"]

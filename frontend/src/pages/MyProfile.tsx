@@ -240,9 +240,10 @@ const MyProfile = () => {
         try {
             const textToParse = parseText.trim() || profile.career_summary || "Please generate a sample profile.";
 
+            // Send current profile and pasted text to backend for strict merging
             const response = await autofillProfile({
-                name: profile.name,
-                career_summary: textToParse
+                current_profile: profile,
+                pasted_text: textToParse
             });
 
             // Validate response structure
@@ -250,33 +251,8 @@ const MyProfile = () => {
                 throw new Error('Invalid AI response');
             }
 
-            // Smart Merge: Only take non-empty fields from AI response
-            const mergedProfile = { ...profile };
-
-            // Flat fields
-            const fieldsToMerge: (keyof ProfileData)[] = ['phone', 'location', 'level', 'experience_years', 'work_mode', 'status', 'bandwidth', 'career_summary', 'search_phrase'];
-            fieldsToMerge.forEach(field => {
-                const val = (response as any)[field];
-                if (val !== undefined && val !== "" && val !== 0 && val !== null) {
-                    (mergedProfile as any)[field] = val;
-                }
-            });
-
-            // Name - only update if non-empty
-            if (response.name) mergedProfile.name = response.name;
-
-            // Arrays - append new items
-            if (response.tech && response.tech.length > 0) {
-                mergedProfile.tech = [...mergedProfile.tech, ...response.tech];
-            }
-            if (response.work_history && response.work_history.length > 0) {
-                mergedProfile.work_history = [...mergedProfile.work_history, ...response.work_history];
-            }
-            if (response.education && response.education.length > 0) {
-                mergedProfile.education = [...mergedProfile.education, ...response.education];
-            }
-
-            setAiGeneratedData(mergedProfile);
+            // Backend already handled the merge correctly
+            setAiGeneratedData(response);
             setShowAIPreview(true);
             setShowParseModal(false); // Close the input modal
             setParseText(''); // Clear text

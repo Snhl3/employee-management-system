@@ -8,10 +8,22 @@ from sqlalchemy.orm import Session
 class LLMService:
     def __init__(self, db: Session):
         self.db = db
-        self.settings = db.query(LLMSettings).first()
         self.logger = logging.getLogger(__name__)
+        self._settings = None
+
+    @property
+    def settings(self) -> LLMSettings:
+        if self._settings is None:
+            try:
+                self._settings = self.db.query(LLMSettings).first()
+            except Exception as e:
+                self.logger.error(f"Error fetching LLM settings: {e}")
+                return None
+        return self._settings
 
     def generate_profile(self, partial_data: str) -> dict:
+        if not self.settings:
+            return self._generate_mock_profile(partial_data)
         provider = self.settings.provider.lower()
         
         if provider == "ollama":
@@ -27,6 +39,8 @@ class LLMService:
             return self._generate_mock_profile(partial_data)
 
     def generate_search_phrase(self, profile_data: dict) -> str:
+        if not self.settings:
+            return self._generate_mock_search_phrase(profile_data)
         provider = self.settings.provider.lower()
         if provider == "ollama":
             return self._generate_ollama_search_phrase(profile_data)
@@ -103,6 +117,8 @@ class LLMService:
         return f"{name} ({emp_id}) - {location} - {status} ({work_mode}) - {exp}yrs Exp in {tech_str}.{history_str}"
 
     def generate_profile_summary(self, profile_data: dict) -> str:
+        if not self.settings:
+            return self._generate_mock_summary(profile_data)
         provider = self.settings.provider.lower()
         
         if provider == "ollama":
@@ -122,14 +138,15 @@ class LLMService:
         response = client.chat.completions.create(
             model=self.settings.model_name,
             messages=[
-                {"role": "system", "content": "You are a strict structured data extractor. Output JSON only."},
+                {"role": "system", "content": "You are a strict structured profile updater."},
                 {"role": "user", "content": prompt}
             ],
             response_format={ "type": "json_object" },
             temperature=0,
             top_p=0,
             frequency_penalty=0,
-            presence_penalty=0
+            presence_penalty=0,
+            seed=42
         )
         return json.loads(response.choices[0].message.content)
 
@@ -146,14 +163,15 @@ class LLMService:
             response = client.chat.completions.create(
                 model=self.settings.model_name,
                 messages=[
-                    {"role": "system", "content": "You are a strict structured data extractor. Output valid JSON."},
+                    {"role": "system", "content": "You are a strict structured profile updater."},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={ "type": "json_object" },
                 temperature=0,
                 top_p=0,
                 frequency_penalty=0,
-                presence_penalty=0
+                presence_penalty=0,
+                seed=42 # For reproducibility
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
@@ -194,70 +212,57 @@ class LLMService:
             return self._generate_mock_summary(profile_data)
 
     def _get_profile_prompt(self, partial_data: str) -> str:
+        # If user has provided a custom prompt, use it
+        if self.settings and self.settings.system_prompt:
+            # Replace placeholder if present
+            prompt = self.settings.system_prompt
+            if "{partial_data}" in prompt:
+                return prompt.replace("{partial_data}", partial_data)
+            return f"{prompt}\n\nUser Input:\n{partial_data}"
+
         return f"""
-        You are a strict structured data extractor.
-        Your job is to extract and map explicitly mentioned information from the provided text into predefined profile fields.
-        
-        ### EXTRACTION RULES:
-        1. Extract ONLY information explicitly present in user input.
-        2. Map extracted information to correct profile fields.
-        3. DO NOT invent, enrich, assume, or expand anything. STRICTLY NO HALLUCINATION.
-        4. DO NOT rewrite or improve grammar.
-        5. DO NOT inject default technologies.
-        6. DO NOT assume experience if not mentioned. If user says "3 years in SQL", map SQL to tech experience and 3.0 to top-level experience_years.
-        7. DO NOT fabricate company names or education.
-        8. If information is missing → leave that field empty.
-        
-        ### FIELD MAPPING RULES:
-        - **Identity**: Name, Email, Phone, Location. Extract exactly as written.
-        - **Technologies**: Extract ONLY if mentioned with experience years/level. If no years/level mentioned, DO NOT include tech.
-        - **Work History**: Company, Role, Duration, Project Name, Responsibilities. Use EXACT wording. Do NOT summarize. **STRICTLY extract specific models (e.g. ARIMA, XGBoost), platforms, and methods mentioned.**
-        - **Education**: Degree, Institution, Year.
-        - **Career Summary**: Extract ONLY the specific "Professional Summary", "Profile", or "Objective" section of the input. DO NOT include job roles, company names, technology lists, or education details in this field. If no dedicated summary is provided, leave this field EMPTY.
-        - **Search Phrase**: If user provides a short summary → use that. If not provided → leave EMPTY.
-        
-        Input Text:
-        {partial_data}
-        
-        Return structured JSON only:
+        You will receive:
+        New pasted user text: {partial_data}
+
+        Rules:
+        Extract ONLY explicitly mentioned information.
+        Do NOT infer.
+        Do NOT enrich.
+        Do NOT rewrite.
+        Do NOT remove existing data.
+        Do NOT duplicate entries.
+        If a section is not mentioned, return null for that field.
+
+        STRICT CAREER SUMMARY RULE:
+        - ONLY update career_summary if user explicitly says: "Update my summary...", "Change my profile summary to...", or provides a dedicated professional summary section.
+        - Do NOT put skills, experience, or general background text into career_summary. 
+        - Skill mentions like "I know Kubernetes" MUST go into tech_stack.
+
+        STRICT TECHNOLOGY EXTRACTION:
+        - If a user mentions a technology and experience years, extract it into tech_stack.
+        - Format: {{"tech": "...", "experience_years": float, "level": "..."}}
+
+        Return ONLY new data to append.
+        Return valid JSON only.
+        No explanation text.
+
+        Return this exact structure:
         {{
-            "name": "...",
-            "email": "...",
-            "phone": "...",
-            "location": "...",
-            "tech": [
-                {{
-                    "tech": "...",
-                    "experience_years": float,
-                    "level": "..."
-                }}
-            ],
-            "level": int,
-            "experience_years": float,
-            "work_mode": "REMOTE" | "OFFICE" | "HYBRID",
-            "status": "ON_BENCH" | "ON_CLIENT",
-            "bandwidth": int,
-            "career_summary": "...",
-            "search_phrase": "...",
-            "work_history": [
-                {{
-                    "company": "...",
-                    "role": "...",
-                    "start_date": "...",
-                    "end_date": "...",
-                    "project": "...",
-                    "description": "..."
-                }}
-            ],
-            "education": [
-                {{
-                    "institution": "...",
-                    "degree": "...",
-                    "field_of_study": "...",
-                    "graduation_year": int
-                }}
-            ]
+        "tech_stack": [],
+        "work_history": [],
+        "education": [],
+        "email": null,
+        "phone": null,
+        "location": null,
+        "status": null,
+        "bandwidth": null,
+        "work_mode": null,
+        "experience": null,
+        "career_summary": null,
+        "search_phrase": null
         }}
+
+        If nothing new → return empty arrays and null values.
         """
 
     def _get_search_phrase_prompt(self, profile_data: dict) -> str:
@@ -304,29 +309,21 @@ class LLMService:
 
     def _generate_mock_profile(self, partial_data: str) -> dict:
         """Fallback mock generator - Neutralized for zero hallucination"""
-        try:
-            data = json.loads(partial_data) if partial_data.startswith('{') else {"career_summary": partial_data}
-            name = data.get("name", "")
-            summary = data.get("career_summary", "")
-        except:
-            name = ""
-            summary = partial_data if partial_data else ""
-        
+        # Return the exact structure requested by user with nulls/empty arrays
+        # to ensure no data is incorrectly mapped if LLM fails.
         return {
-            "name": name,
-            "email": "",
-            "phone": "",
-            "location": "",
-            "tech": [],
-            "level": 1,
-            "experience_years": 0.0,
-            "work_mode": "OFFICE",
-            "status": "ON_BENCH",
-            "bandwidth": 100,
-            "career_summary": summary,
-            "search_phrase": "",
+            "tech_stack": [],
             "work_history": [],
-            "education": []
+            "education": [],
+            "email": None,
+            "phone": None,
+            "location": None,
+            "status": None,
+            "bandwidth": None,
+            "work_mode": None,
+            "experience": None,
+            "career_summary": None,
+            "search_phrase": None
         }
 
     def _generate_mock_summary(self, profile_data: dict) -> str:
@@ -335,22 +332,23 @@ class LLMService:
 
     def fetch_available_models(self, provider: str) -> list:
         provider = provider.lower()
+        fallback_ollama = ["llama3", "mistral", "phi3", "gemma"]
+        fallback_openai = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+        
         if provider == "ollama":
             try:
                 import requests
-                # Use settings.api_base or default
                 api_base = self.settings.api_base if (self.settings and self.settings.api_base) else "http://localhost:11434/v1"
-                # Extract host from api_base (strip /v1)
-                host = api_base.split("/v1")[0]
-                response = requests.get(f"{host}/api/tags", timeout=5)
+                host = api_base.split("/v1")[0] if "/v1" in api_base else api_base
+                response = requests.get(f"{host}/api/tags", timeout=3)
                 if response.status_code == 200:
                     models = response.json().get("models", [])
-                    return [m["name"] for m in models]
+                    if models:
+                        return [m["name"] for m in models]
             except Exception as e:
-                print(f"Ollama fetch failed: {e}")
-            return ["llama3", "mistral", "phi3"] # Fallback
+                self.logger.error(f"Ollama fetch failed: {e}")
+            return fallback_ollama
         elif provider == "openai":
-            # Return curated list of popular models
-            return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+            return fallback_openai
         else:
             return ["mock-model"]

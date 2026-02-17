@@ -113,11 +113,85 @@ async def parse_resume_endpoint(file: UploadFile = File(...), current_user: User
 
 @router.post("/autofill")
 def autofill_profile(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Strict incremental structured update logic.
+    Receives current profile and pasted text, extracts new info via LLM, and merges.
+    """
     llm_service = LLMService(db)
     try:
-        structured_data = llm_service.generate_profile(json.dumps(data))
-        return structured_data
+        current_profile = data.get("current_profile", {})
+        pasted_text = data.get("pasted_text", "")
+        
+        # 1. Extract info via LLM
+        # We send only the career_summary if that's where the text is, 
+        # but the prompt now handles the raw "pasted_text".
+        llm_response = llm_service.generate_profile(pasted_text)
+        
+        # 2. Strict Merge Logic
+        merged_data = current_profile.copy()
+        
+        # Single fields mapping
+        # tech_stack -> tech (already handling mapping below)
+        # experience -> experience_years
+        field_mapping = {
+            "email": "email",
+            "phone": "phone",
+            "location": "location",
+            "status": "status",
+            "bandwidth": "bandwidth",
+            "work_mode": "work_mode",
+            "experience": "experience_years",
+            "career_summary": "career_summary",
+            "search_phrase": "search_phrase"
+        }
+        
+        for llm_key, profile_key in field_mapping.items():
+            val = llm_response.get(llm_key)
+            if val is not None and val != "":
+                merged_data[profile_key] = val
+        
+        # Array fields with duplicate checking
+        # tech_stack
+        llm_tech = llm_response.get("tech_stack", [])
+        if llm_tech:
+            existing_techs = {t.get("tech", "").lower() for t in merged_data.get("tech", [])}
+            for t in llm_tech:
+                if t.get("tech") and t.get("tech").lower() not in existing_techs:
+                    if "tech" not in merged_data or merged_data["tech"] is None:
+                        merged_data["tech"] = []
+                    merged_data["tech"].append(t)
+                    existing_techs.add(t.get("tech").lower())
+        
+        # work_history
+        llm_history = llm_response.get("work_history", [])
+        if llm_history:
+            # Simple duplicate check: company + role
+            existing_history = {f"{h.get('company', '').lower()}|{h.get('role', '').lower()}" for h in merged_data.get("work_history", [])}
+            for h in llm_history:
+                key = f"{h.get('company', '').lower()}|{h.get('role', '').lower()}"
+                if key not in existing_history:
+                    if "work_history" not in merged_data or merged_data["work_history"] is None:
+                        merged_data["work_history"] = []
+                    merged_data["work_history"].append(h)
+                    existing_history.add(key)
+        
+        # education
+        llm_edu = llm_response.get("education", [])
+        if llm_edu:
+            # Simple duplicate check: institution + degree
+            existing_edu = {f"{e.get('institution', '').lower()}|{e.get('degree', '').lower()}" for e in merged_data.get("education", [])}
+            for e in llm_edu:
+                key = f"{e.get('institution', '').lower()}|{e.get('degree', '').lower()}"
+                if key not in existing_edu:
+                    if "education" not in merged_data or merged_data["education"] is None:
+                        merged_data["education"] = []
+                    merged_data["education"].append(e)
+                    existing_edu.add(key)
+        
+        return merged_data
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-summary")

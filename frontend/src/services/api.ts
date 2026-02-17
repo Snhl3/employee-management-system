@@ -118,6 +118,7 @@ export interface LLMSettings {
     model_name: string;
     api_key?: string;
     api_base?: string;
+    system_prompt?: string;
 }
 
 export const updateLLMSettings = async (settings: LLMSettings) => {
