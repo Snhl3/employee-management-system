@@ -48,6 +48,7 @@ class EmployeeResponse(EmployeeBase):
     work_history: List[WorkHistoryResponse] = []
     education: List[EducationResponse] = []
     clients: List[Client] = []
+    match_score: Optional[float] = None
 
     class Config:
         from_attributes = True

@@ -147,8 +147,6 @@ def search_employees(
 ):
     # Access Control: If not Admin, return ONLY own profile (if matches)
     if current_user.role != UserRole.ADMIN:
-        # We search specifically for the current user's employee record
-        # and apply filters to it. If it matches, return [it], else [].
         base_query = db.query(models.Employee).filter(models.Employee.email == current_user.email)
     else:
         base_query = db.query(models.Employee)
@@ -169,7 +167,6 @@ def search_employees(
         base_query = base_query.filter(models.Employee.name.ilike(f"%{name}%"))
     
     if tech:
-        # Simple text match on JSON column cast to text
         base_query = base_query.filter(models.Employee.tech.cast(models.Text).ilike(f"%{tech}%"))
         
     if status:
@@ -191,68 +188,77 @@ def search_employees(
 
     results = base_query.all()
     
+    # Reset match scores
+    for emp in results:
+        emp.match_score = None
+
     # ---------------------------------------------------------
     # JD Scoring & Sorting Logic
     # ---------------------------------------------------------
     if jd and results:
         import re
-        # Tokenize JD: remove punctuation, lowercase, split
-        # We look for words > 2 chars to avoid noise
         jd_text = jd.lower()
         jd_keywords = set(re.findall(r'\b[a-z]{3,}\b', jd_text))
         
+        if not jd_keywords:
+            return []
+
         scored_results = []
         for emp in results:
-            score = 0
-            
             # Helper to check text overlap
-            def count_matches(source_text, keywords):
+            def get_matches(source_text, keywords):
                 if not source_text:
-                    return 0
+                    return set()
                 tokens = set(re.findall(r'\b[a-z]{3,}\b', source_text.lower()))
-                return len(keywords.intersection(tokens))
+                return keywords.intersection(tokens)
 
-            # 1. High Weight: Tech Stack & Search Phrase (3 pts per match)
+            # Calculate individual matches
             tech_str = " ".join([t.get("tech", "") for t in emp.tech]) if emp.tech else ""
-            score += count_matches(tech_str, jd_keywords) * 3
-            score += count_matches(emp.search_phrase, jd_keywords) * 3
+            tech_matches = get_matches(tech_str, jd_keywords)
+            phrase_matches = get_matches(emp.search_phrase, jd_keywords)
+            summary_matches = get_matches(emp.career_summary, jd_keywords)
             
-            # 2. Medium Weight: Career Summary (2 pts per match)
-            score += count_matches(emp.career_summary, jd_keywords) * 2
-            
-            # 3. Low Weight: Work History & Clients (1 pt per match)
             work_str = ""
             if emp.work_history:
                 work_str += " ".join([f"{h.description} {h.role} {h.project}" for h in emp.work_history])
             if emp.clients:
                 client_str = " ".join([c.get("description", "") for c in emp.clients])
                 work_str += " " + client_str
+            work_matches = get_matches(work_str, jd_keywords)
+
+            # Unique matched keywords across all relevant fields
+            all_matched_keywords = tech_matches | phrase_matches | summary_matches | work_matches
             
-            score += count_matches(work_str, jd_keywords) * 1
+            # Percentage Score
+            percentage = (len(all_matched_keywords) / len(jd_keywords)) * 100 if jd_keywords else 0
             
-            scored_results.append((score, emp))
+            if percentage >= 50:
+                emp.match_score = round(percentage, 1)
+                scored_results.append(emp)
         
-        # Sort by score desc
-        scored_results.sort(key=lambda x: x[0], reverse=True)
-        return [x[1] for x in scored_results]
+        # Sort by match score desc
+        scored_results.sort(key=lambda x: x.match_score, reverse=True)
+        return scored_results
 
     # ---------------------------------------------------------
     # Basic Search Sorting
     # ---------------------------------------------------------
-    # If no JD, but we have a query, prioritize exact name/phrase matches
     if query and results:
         q_lower = query.lower()
         def basic_rank(emp):
             # Rank 1 (Top): Exact Name or Emp ID match
             if emp.name.lower() == q_lower or emp.emp_id.lower() == q_lower:
                 return 100
-            # Rank 2: Query in Name
+            # Rank 2: Exact Search Phrase match
+            if emp.search_phrase and emp.search_phrase.lower() == q_lower:
+                return 90
+            # Rank 3: Query in Name
             if q_lower in emp.name.lower():
                 return 80
-            # Rank 3: Query in Search Phrase
+            # Rank 4: Query in Search Phrase
             if emp.search_phrase and q_lower in emp.search_phrase.lower():
                 return 60
-            # Rank 4: Query in Tech
+            # Rank 5: Query in Tech
             tech_str = " ".join([t.get("tech", "") for t in emp.tech]) if emp.tech else ""
             if q_lower in tech_str.lower():
                 return 40
