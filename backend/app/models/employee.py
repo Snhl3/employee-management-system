@@ -30,6 +30,7 @@ class Employee(Base):
     bandwidth = Column(Integer, default=100) # Percentage
     career_summary = Column(Text)
     search_phrase = Column(Text) # For AI-driven search indexing
+    clients = Column(JSON, default=list) # List of clients: [{client_name, client_status, description}]
     created_at = Column(DateTime, default=datetime.utcnow)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

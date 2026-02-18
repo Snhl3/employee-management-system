@@ -39,82 +39,53 @@ class LLMService:
             return self._generate_mock_profile(partial_data)
 
     def generate_search_phrase(self, profile_data: dict) -> str:
-        if not self.settings:
-            return self._generate_mock_search_phrase(profile_data)
-        provider = self.settings.provider.lower()
-        if provider == "ollama":
-            return self._generate_ollama_search_phrase(profile_data)
-        elif provider == "openai":
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                return self._generate_mock_search_phrase(profile_data)
-            return self._generate_openai_search_phrase(profile_data, api_key)
-        else:
-            return self._generate_mock_search_phrase(profile_data)
-
-    def _generate_openai_search_phrase(self, profile_data: dict, api_key: str) -> str:
-        client = OpenAI(api_key=api_key)
-        prompt = self._get_search_phrase_prompt(profile_data)
-        response = client.chat.completions.create(
-            model=self.settings.model_name,
-            messages=[
-                {"role": "system", "content": "You are a concise indexing assistant."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-
-    def _generate_ollama_search_phrase(self, profile_data: dict) -> str:
-        api_base = self.settings.api_base or "http://localhost:11434/v1"
-        client = OpenAI(base_url=api_base, api_key="ollama")
-        prompt = self._get_search_phrase_prompt(profile_data)
-        try:
-            response = client.chat.completions.create(
-                model=self.settings.model_name,
-                messages=[
-                    {"role": "system", "content": "You are a concise indexing assistant."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            return self._generate_mock_search_phrase(profile_data)
-
-    def _generate_mock_search_phrase(self, profile_data: dict) -> str:
+        """
+        Deterministic, structured summary generation.
+        Includes: Name, Location, Bandwidth, Tech, ID, Status, Work Mode, Exp, Work History, Clients.
+        """
         name = profile_data.get("name", "Unknown")
         emp_id = profile_data.get("emp_id", "No ID")
         location = profile_data.get("location", "No Location")
+        bandwidth = profile_data.get("bandwidth", 0)
         status = profile_data.get("status", "Unknown Status")
         work_mode = profile_data.get("work_mode", "Unknown Mode")
         exp = profile_data.get("experience_years", 0)
-        tech_list = [t["tech"] for t in profile_data.get("tech", [])[:3]]
-        tech_str = ", ".join(tech_list) if tech_list else "Generalist"
         
-        # History & Keyword analysis
+        # Tech
+        tech_list = [t["tech"] for t in profile_data.get("tech", [])]
+        tech_str = ", ".join(tech_list) if tech_list else "No specific tech"
+        
+        # Work History
         history = profile_data.get("work_history", [])
-        history_str = ""
-        keywords = []
-        # Target specific models and roles
-        target_keywords = ["arima", "random forest", "xgboost", "data analyst", "data scientist", "ml engineer", "ai engineer", "genai", "llm", "bert", "transformer", "sql"]
-        
-        if history:
-            projects = [h.get("project") for h in history if h.get("project")]
-            roles = [h.get("role") for h in history if h.get("role")]
-            
-            for h in history:
-                desc = (h.get("description") or "").lower()
-                for kw in target_keywords:
-                    if kw in desc and kw.title() not in [k.title() for k in keywords]:
-                        keywords.append(kw.upper() if len(kw) <= 3 else kw.title())
-            
-            history_parts = []
-            if roles: history_parts.append(f"Roles: {', '.join(roles[:2])}")
-            if projects: history_parts.append(f"Projects: {', '.join(projects[:2])}")
-            if keywords: history_parts.append(f"Models/Spec: {', '.join(keywords)}")
-            
-            history_str = f" Previously: {' | '.join(history_parts)}."
+        history_parts = []
+        for h in history:
+            company = h.get("company", "Unknown")
+            role = h.get("role", "Unknown")
+            history_parts.append(f"{company} ({role})")
+        history_str = "; ".join(history_parts) if history_parts else "No work history"
 
-        return f"{name} ({emp_id}) - {location} - {status} ({work_mode}) - {exp}yrs Exp in {tech_str}.{history_str}"
+        # Clients
+        clients = profile_data.get("clients", [])
+        client_count = len(clients)
+        client_details = []
+        for c in clients:
+            c_name = c.get("client_name", "Unknown")
+            c_desc = c.get("description", "")
+            # Truncate description if too long
+            short_desc = (c_desc[:50] + '..') if len(c_desc) > 50 else c_desc
+            client_details.append(f"{c_name} [{short_desc}]")
+        
+        client_str = f"{client_count} Clients: {', '.join(client_details)}" if clients else "No active clients"
+
+        # Structured Output
+        lines = [
+            f"{name} ({emp_id}) | {location} | {status} ({work_mode}) | {bandwidth}% Bandwidth",
+            f"Exp: {exp} years | Tech: {tech_str}",
+            f"History: {history_str}",
+            f"Clients: {client_str}"
+        ]
+        
+        return "\n".join(lines)
 
     def generate_profile_summary(self, profile_data: dict) -> str:
         if not self.settings:

@@ -62,11 +62,14 @@ def update_employee(
 
 def update_employee_record(db_employee, employee_update, db):
     print(f"DEBUG: Updating employee record for ID: {db_employee.emp_id}")
-    # Update flat fields
-    update_data = employee_update.model_dump(exclude={"work_history", "education"})
+    # Update flat fields (exclude relational and JSON-array fields)
+    update_data = employee_update.model_dump(exclude={"work_history", "education", "clients"})
     for key, value in update_data.items():
         setattr(db_employee, key, value)
     
+    # Update clients (JSON column)
+    db_employee.clients = [c.model_dump() for c in employee_update.clients]
+
     # Update work history (simple replace)
     db.query(history_models.WorkHistory).filter(history_models.WorkHistory.employee_id == db_employee.id).delete()
     for hist in employee_update.work_history:
@@ -81,118 +84,6 @@ def update_employee_record(db_employee, employee_update, db):
     db.commit()
     db.refresh(db_employee)
     return db_employee
-
-@router.post("/parse-resume")
-async def parse_resume_endpoint(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
-    filename = file.filename.lower()
-    if not filename.endswith(('.pdf', '.docx')):
-        raise HTTPException(status_code=400, detail="Invalid file type. Only PDF and DOCX are supported.")
-    
-    try:
-        contents = await file.read()
-        text = ""
-        
-        if filename.endswith('.pdf'):
-            pdf_reader = pypdf.PdfReader(io.BytesIO(contents))
-            for page in pdf_reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
-        elif filename.endswith('.docx'):
-            doc = docx.Document(io.BytesIO(contents))
-            for para in doc.paragraphs:
-                text += para.text + "\n"
-        
-        if not text.strip():
-            raise HTTPException(status_code=422, detail="Parsed text is empty. The file might be an image or encrypted.")
-            
-        return {"text": text}
-    except Exception as e:
-        print(f"Error parsing resume: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to parse resume: {str(e)}")
-
-@router.post("/autofill")
-def autofill_profile(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """
-    Strict incremental structured update logic.
-    Receives current profile and pasted text, extracts new info via LLM, and merges.
-    """
-    llm_service = LLMService(db)
-    try:
-        current_profile = data.get("current_profile", {})
-        pasted_text = data.get("pasted_text", "")
-        
-        # 1. Extract info via LLM
-        # We send only the career_summary if that's where the text is, 
-        # but the prompt now handles the raw "pasted_text".
-        llm_response = llm_service.generate_profile(pasted_text)
-        
-        # 2. Strict Merge Logic
-        merged_data = current_profile.copy()
-        
-        # Single fields mapping
-        # tech_stack -> tech (already handling mapping below)
-        # experience -> experience_years
-        field_mapping = {
-            "email": "email",
-            "phone": "phone",
-            "location": "location",
-            "status": "status",
-            "bandwidth": "bandwidth",
-            "work_mode": "work_mode",
-            "experience": "experience_years",
-            "career_summary": "career_summary",
-            "search_phrase": "search_phrase"
-        }
-        
-        for llm_key, profile_key in field_mapping.items():
-            val = llm_response.get(llm_key)
-            if val is not None and val != "":
-                merged_data[profile_key] = val
-        
-        # Array fields with duplicate checking
-        # tech_stack
-        llm_tech = llm_response.get("tech_stack", [])
-        if llm_tech:
-            existing_techs = {t.get("tech", "").lower() for t in merged_data.get("tech", [])}
-            for t in llm_tech:
-                if t.get("tech") and t.get("tech").lower() not in existing_techs:
-                    if "tech" not in merged_data or merged_data["tech"] is None:
-                        merged_data["tech"] = []
-                    merged_data["tech"].append(t)
-                    existing_techs.add(t.get("tech").lower())
-        
-        # work_history
-        llm_history = llm_response.get("work_history", [])
-        if llm_history:
-            # Simple duplicate check: company + role
-            existing_history = {f"{h.get('company', '').lower()}|{h.get('role', '').lower()}" for h in merged_data.get("work_history", [])}
-            for h in llm_history:
-                key = f"{h.get('company', '').lower()}|{h.get('role', '').lower()}"
-                if key not in existing_history:
-                    if "work_history" not in merged_data or merged_data["work_history"] is None:
-                        merged_data["work_history"] = []
-                    merged_data["work_history"].append(h)
-                    existing_history.add(key)
-        
-        # education
-        llm_edu = llm_response.get("education", [])
-        if llm_edu:
-            # Simple duplicate check: institution + degree
-            existing_edu = {f"{e.get('institution', '').lower()}|{e.get('degree', '').lower()}" for e in merged_data.get("education", [])}
-            for e in llm_edu:
-                key = f"{e.get('institution', '').lower()}|{e.get('degree', '').lower()}"
-                if key not in existing_edu:
-                    if "education" not in merged_data or merged_data["education"] is None:
-                        merged_data["education"] = []
-                    merged_data["education"].append(e)
-                    existing_edu.add(key)
-        
-        return merged_data
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-summary")
 def generate_summary(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -221,14 +112,18 @@ def generate_search_phrase(profile_data: dict, current_user: User = Depends(get_
 
 @router.post("/", response_model=schemas.EmployeeResponse)
 def create_employee(employee: schemas.EmployeeCreate, db: Session = Depends(get_db)):
-    db_employee = models.Employee(**employee.dict(exclude={"work_history", "education"}))
+    db_employee = models.Employee(**employee.dict(exclude={"work_history", "education", "clients"}))
     
     for hist in employee.work_history:
         db_employee.work_history.append(models.WorkHistory(**hist.dict()))
     
     for edu in employee.education:
         db_employee.education.append(models.Education(**edu.dict()))
-        
+    
+    # Clients are JSON, so we can just assign if using Pydantic V2 or handle manual list
+    if employee.clients:
+        db_employee.clients = [c.dict() for c in employee.clients]
+
     db.add(db_employee)
     db.commit()
     db.refresh(db_employee)
@@ -239,17 +134,133 @@ def read_employees(skip: int = 0, limit: int = 100, db: Session = Depends(get_db
     return db.query(models.Employee).offset(skip).limit(limit).all()
 
 @router.get("/search", response_model=List[schemas.EmployeeResponse])
-def search_employees(query: str = Query(...), db: Session = Depends(get_db)):
-    # Expanded search across multiple fields
-    search_filter = f"%{query}%"
-    return db.query(models.Employee).filter(
-        (models.Employee.name.ilike(search_filter)) |
-        (models.Employee.emp_id.ilike(search_filter)) |
-        (models.Employee.location.ilike(search_filter)) |
-        (models.Employee.career_summary.ilike(search_filter)) |
-        (models.Employee.search_phrase.ilike(search_filter)) |
-        (models.Employee.tech.cast(models.Text).ilike(search_filter))
-    ).all()
+def search_employees(
+    query: str = Query(None), 
+    name: str = Query(None),
+    tech: str = Query(None),
+    status: str = Query(None),
+    bandwidth: str = Query(None),
+    experience: str = Query(None),
+    jd: str = Query(None),  # Job Description for matching
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Access Control: If not Admin, return ONLY own profile (if matches)
+    if current_user.role != UserRole.ADMIN:
+        # We search specifically for the current user's employee record
+        # and apply filters to it. If it matches, return [it], else [].
+        base_query = db.query(models.Employee).filter(models.Employee.email == current_user.email)
+    else:
+        base_query = db.query(models.Employee)
+
+    # Apply Filters
+    if query:
+        search_filter = f"%{query}%"
+        base_query = base_query.filter(
+            (models.Employee.name.ilike(search_filter)) |
+            (models.Employee.emp_id.ilike(search_filter)) |
+            (models.Employee.location.ilike(search_filter)) |
+            (models.Employee.career_summary.ilike(search_filter)) |
+            (models.Employee.search_phrase.ilike(search_filter)) |
+            (models.Employee.tech.cast(models.Text).ilike(search_filter))
+        )
+    
+    if name:
+        base_query = base_query.filter(models.Employee.name.ilike(f"%{name}%"))
+    
+    if tech:
+        # Simple text match on JSON column cast to text
+        base_query = base_query.filter(models.Employee.tech.cast(models.Text).ilike(f"%{tech}%"))
+        
+    if status:
+        base_query = base_query.filter(models.Employee.status == status)
+
+    if bandwidth:
+        try:
+            bw_val = int(bandwidth)
+            base_query = base_query.filter(models.Employee.bandwidth >= bw_val)
+        except ValueError:
+            pass
+            
+    if experience:
+        try:
+            exp_val = float(experience)
+            base_query = base_query.filter(models.Employee.experience_years >= exp_val)
+        except ValueError:
+            pass
+
+    results = base_query.all()
+    
+    # ---------------------------------------------------------
+    # JD Scoring & Sorting Logic
+    # ---------------------------------------------------------
+    if jd and results:
+        import re
+        # Tokenize JD: remove punctuation, lowercase, split
+        # We look for words > 2 chars to avoid noise
+        jd_text = jd.lower()
+        jd_keywords = set(re.findall(r'\b[a-z]{3,}\b', jd_text))
+        
+        scored_results = []
+        for emp in results:
+            score = 0
+            
+            # Helper to check text overlap
+            def count_matches(source_text, keywords):
+                if not source_text:
+                    return 0
+                tokens = set(re.findall(r'\b[a-z]{3,}\b', source_text.lower()))
+                return len(keywords.intersection(tokens))
+
+            # 1. High Weight: Tech Stack & Search Phrase (3 pts per match)
+            tech_str = " ".join([t.get("tech", "") for t in emp.tech]) if emp.tech else ""
+            score += count_matches(tech_str, jd_keywords) * 3
+            score += count_matches(emp.search_phrase, jd_keywords) * 3
+            
+            # 2. Medium Weight: Career Summary (2 pts per match)
+            score += count_matches(emp.career_summary, jd_keywords) * 2
+            
+            # 3. Low Weight: Work History & Clients (1 pt per match)
+            work_str = ""
+            if emp.work_history:
+                work_str += " ".join([f"{h.description} {h.role} {h.project}" for h in emp.work_history])
+            if emp.clients:
+                client_str = " ".join([c.get("description", "") for c in emp.clients])
+                work_str += " " + client_str
+            
+            score += count_matches(work_str, jd_keywords) * 1
+            
+            scored_results.append((score, emp))
+        
+        # Sort by score desc
+        scored_results.sort(key=lambda x: x[0], reverse=True)
+        return [x[1] for x in scored_results]
+
+    # ---------------------------------------------------------
+    # Basic Search Sorting
+    # ---------------------------------------------------------
+    # If no JD, but we have a query, prioritize exact name/phrase matches
+    if query and results:
+        q_lower = query.lower()
+        def basic_rank(emp):
+            # Rank 1 (Top): Exact Name or Emp ID match
+            if emp.name.lower() == q_lower or emp.emp_id.lower() == q_lower:
+                return 100
+            # Rank 2: Query in Name
+            if q_lower in emp.name.lower():
+                return 80
+            # Rank 3: Query in Search Phrase
+            if emp.search_phrase and q_lower in emp.search_phrase.lower():
+                return 60
+            # Rank 4: Query in Tech
+            tech_str = " ".join([t.get("tech", "") for t in emp.tech]) if emp.tech else ""
+            if q_lower in tech_str.lower():
+                return 40
+            return 0
+            
+        results.sort(key=basic_rank, reverse=True)
+
+    return results
 
 @router.get("/recent", response_model=List[schemas.EmployeeResponse])
 def get_recent_updates(limit: int = 5, db: Session = Depends(get_db)):

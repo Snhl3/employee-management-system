@@ -25,6 +25,12 @@ interface Education {
     graduation_year?: number;
 }
 
+interface Client {
+    client_name: string;
+    client_status: 'Active' | 'Completed' | 'Pipeline';
+    description: string;
+}
+
 interface ProfileData {
     id?: number;
     emp_id: string;
@@ -42,6 +48,7 @@ interface ProfileData {
     search_phrase: string;
     work_history: WorkHistory[];
     education: Education[];
+    clients?: Client[];
 }
 
 const MyProfile = () => {
@@ -53,13 +60,8 @@ const MyProfile = () => {
     const [saving, setSaving] = useState(false);
     const [autofilling, setAutofilling] = useState(false);
     const [generatingSummary, setGeneratingSummary] = useState(false);
+    // Removed AI Preview State
     const [message, setMessage] = useState('');
-    const [showAIPreview, setShowAIPreview] = useState(false);
-    const [aiGeneratedData, setAiGeneratedData] = useState<ProfileData | null>(null);
-    const [showParseModal, setShowParseModal] = useState(false);
-    const [parseText, setParseText] = useState('');
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [parsingResume, setParsingResume] = useState(false);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -80,6 +82,7 @@ const MyProfile = () => {
                 }
                 if (!data.work_history) data.work_history = [];
                 if (!data.education) data.education = [];
+                if (!data.clients) data.clients = [];
                 setProfile(data);
             } catch (error) {
                 console.error('Failed to load profile', error);
@@ -196,7 +199,8 @@ const MyProfile = () => {
                 career_summary: '',
                 search_phrase: '',
                 work_history: [],
-                education: []
+                education: [],
+                clients: []
             };
             const newProfile = await createEmployee(newProfileData);
             setProfile(newProfile);
@@ -209,77 +213,31 @@ const MyProfile = () => {
         }
     };
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    // Resume upload and parsing features removed
 
-        // Max 10MB
-        if (file.size > 10 * 1024 * 1024) {
-            setMessage('File is too large (max 10MB).');
-            return;
-        }
-
-        setParsingResume(true);
-        try {
-            const data = await parseResume(file);
-            setParseText(data.text);
-            setShowParseModal(true);
-            setMessage('Resume parsed successfully! Review text below.');
-            setTimeout(() => setMessage(''), 5000);
-        } catch (error: any) {
-            setMessage(`Upload/Parse failed: ${error.message}`);
-        } finally {
-            setParsingResume(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-    };
-
-    const handleAIAutofill = async () => {
+    // --- Client Handlers ---
+    const handleClientChange = (index: number, e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         if (!profile) return;
-        setAutofilling(true);
-        try {
-            const textToParse = parseText.trim() || profile.career_summary || "Please generate a sample profile.";
-
-            // Send current profile and pasted text to backend for strict merging
-            const response = await autofillProfile({
-                current_profile: profile,
-                pasted_text: textToParse
-            });
-
-            // Validate response structure
-            if (!response || typeof response !== 'object') {
-                throw new Error('Invalid AI response');
-            }
-
-            // Backend already handled the merge correctly
-            setAiGeneratedData(response);
-            setShowAIPreview(true);
-            setShowParseModal(false); // Close the input modal
-            setParseText(''); // Clear text
-            setMessage('');
-        } catch (error) {
-            console.error('AI autofill error:', error);
-            setMessage('AI failed to parse text. Please check LLM settings or try again.');
-        } finally {
-            setAutofilling(false);
-        }
+        const newClients = profile.clients ? [...profile.clients] : [];
+        newClients[index] = { ...newClients[index], [e.target.name]: e.target.value };
+        setProfile({ ...profile, clients: newClients });
     };
 
-    const handleConfirmAIData = () => {
-        if (aiGeneratedData) {
-            setProfile(aiGeneratedData);
-            setShowAIPreview(false);
-            // Hard Guard: Save immediately to database
-            handleSave(aiGeneratedData);
-            setMessage('AI data confirmed and saved to database!');
-            setTimeout(() => setMessage(''), 5000);
-        }
+    const addClient = () => {
+        if (!profile) return;
+        const newClients = profile.clients ? [...profile.clients] : [];
+        newClients.push({ client_name: '', client_status: 'Active', description: '' });
+        setProfile({ ...profile, clients: newClients });
     };
 
-    const handleCancelAIData = () => {
-        setShowAIPreview(false);
-        setAiGeneratedData(null);
+    const removeClient = (index: number) => {
+        if (!profile) return;
+        const newClients = profile.clients ? [...profile.clients] : [];
+        newClients.splice(index, 1);
+        setProfile({ ...profile, clients: newClients });
     };
+
+    // Removed AI Autofill handlers
 
     const handleGenerateSummary = async () => {
         if (!profile) return;
@@ -332,83 +290,13 @@ const MyProfile = () => {
     );
 
     return (
-        <div className="container-fluid py-4">
-            {/* AI CONFIRMATION MODAL */}
-            {showAIPreview && aiGeneratedData && (
-                <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
-                    <div className="modal-dialog modal-xl modal-dialog-scrollable">
-                        <div className="modal-content">
-                            <div className="modal-header bg-primary text-white">
-                                <h5 className="modal-title"><i className="bi bi-magic me-2"></i>AI Generated Profile Preview</h5>
-                                <button type="button" className="btn-close btn-close-white" onClick={handleCancelAIData}></button>
-                            </div>
-                            <div className="modal-body">
-                                <div className="alert alert-info">
-                                    <i className="bi bi-info-circle me-2"></i>
-                                    Review the AI-generated data below. Click "Confirm & Apply" to populate your profile, or "Cancel" to discard.
-                                </div>
-
-                                <div className="row g-3">
-                                    <div className="col-md-6">
-                                        <label className="form-label small fw-bold">Name</label>
-                                        <input type="text" className="form-control" value={aiGeneratedData.name}
-                                            onChange={(e) => setAiGeneratedData({ ...aiGeneratedData, name: e.target.value })} />
-                                    </div>
-                                    <div className="col-md-6">
-                                        <label className="form-label small fw-bold">Email</label>
-                                        <input type="email" className="form-control" value={aiGeneratedData.email} disabled />
-                                    </div>
-                                    <div className="col-md-6">
-                                        <label className="form-label small fw-bold">Phone</label>
-                                        <input type="text" className="form-control" value={aiGeneratedData.phone}
-                                            onChange={(e) => setAiGeneratedData({ ...aiGeneratedData, phone: e.target.value })} />
-                                    </div>
-                                    <div className="col-md-6">
-                                        <label className="form-label small fw-bold">Location</label>
-                                        <input type="text" className="form-control" value={aiGeneratedData.location}
-                                            onChange={(e) => setAiGeneratedData({ ...aiGeneratedData, location: e.target.value })} />
-                                    </div>
-                                    <div className="col-12">
-                                        <label className="form-label small fw-bold">Primary Technologies</label>
-                                        <div className="mt-2">
-                                            {aiGeneratedData.tech && aiGeneratedData.tech.map((t, idx) => (
-                                                <div key={idx} className="badge bg-secondary me-2 mb-2 p-2 d-inline-flex align-items-center">
-                                                    {t.tech} ({t.experience_years}y)
-                                                    <button type="button" className="btn-close btn-close-white ms-2" style={{ fontSize: '0.5rem' }}
-                                                        onClick={() => {
-                                                            const newTech = aiGeneratedData.tech.filter((_, i) => i !== idx);
-                                                            setAiGeneratedData({ ...aiGeneratedData, tech: newTech });
-                                                        }}></button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="col-12">
-                                        <label className="form-label small fw-bold">Career Summary</label>
-                                        <textarea className="form-control" rows={5} value={aiGeneratedData.career_summary}
-                                            onChange={(e) => setAiGeneratedData({ ...aiGeneratedData, career_summary: e.target.value })} />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={handleCancelAIData}>
-                                    <i className="bi bi-x-circle me-2"></i>Cancel
-                                </button>
-                                <button type="button" className="btn btn-primary" onClick={handleConfirmAIData}>
-                                    <i className="bi bi-check-circle me-2"></i>Confirm & Apply to Profile
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
+        <div className="container-fluid py-4 profile-page">
             {/* 1. TOP HEADER SECTION */}
-            <header className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+            <header className="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-3 border-bottom gap-3">
                 <div>
                     <h1 className="fw-bold text-uppercase mb-0 display-6">{profile.name}</h1>
-                    <div className="d-flex align-items-center mt-1">
-                        <span className="text-muted fs-5 me-2">Employee ID:</span>
+                    <div className="d-flex align-items-center mt-2">
+                        <span className="text-muted me-2">Employee ID:</span>
                         <input
                             type="text"
                             name="emp_id"
@@ -420,67 +308,14 @@ const MyProfile = () => {
                     </div>
                 </div>
                 <div className="d-flex gap-2">
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        className="d-none"
-                        accept=".pdf,.docx"
-                        onChange={handleFileUpload}
-                    />
-                    <button
-                        type="button"
-                        className="btn btn-outline-secondary d-flex align-items-center"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={parsingResume || autofilling}
-                    >
-                        {parsingResume ? <span className="spinner-border spinner-border-sm me-2"></span> : <i className="bi bi-file-earmark-arrow-up me-2"></i>}
-                        Upload Resume (PDF/DOCX)
-                    </button>
-                    <button
-                        type="button"
-                        className="btn btn-outline-primary d-flex align-items-center"
-                        onClick={() => setShowParseModal(true)}
-                        disabled={autofilling || parsingResume}
-                    >
-                        {autofilling ? <span className="spinner-border spinner-border-sm me-2"></span> : <i className="bi bi-magic me-2"></i>}
-                        Paste Text
-                    </button>
-                    <button type="button" className="btn btn-success fw-bold px-4" onClick={() => handleSave()} disabled={saving}>
+                    <button type="button" className="btn btn-success fw-bold px-4 py-2" onClick={() => handleSave()} disabled={saving}>
                         {saving ? <span className="spinner-border spinner-border-sm me-2"></span> : <i className="bi bi-save me-2"></i>}
                         SAVE
                     </button>
                 </div>
             </header>
 
-            {/* Parse Resume Modal */}
-            {showParseModal && (
-                <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-lg">
-                        <div className="modal-content">
-                            <div className="modal-header">
-                                <h5 className="modal-title">Parse Resume or Profile Text</h5>
-                                <button type="button" className="btn-close" onClick={() => setShowParseModal(false)}></button>
-                            </div>
-                            <div className="modal-body">
-                                <p className="text-muted small">Paste your resume, LinkedIn bio, or any raw text description below. The AI will extract structured data to fill your profile.</p>
-                                <textarea
-                                    className="form-control"
-                                    rows={10}
-                                    value={parseText}
-                                    onChange={(e) => setParseText(e.target.value)}
-                                    placeholder="Paste text here..."
-                                ></textarea>
-                            </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setShowParseModal(false)}>Cancel</button>
-                                <button type="button" className="btn btn-primary" onClick={handleAIAutofill} disabled={autofilling || !parseText.trim()}>
-                                    {autofilling ? 'Parsing...' : 'Analyze & Fill'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Removed Parse Resume Modal */}
 
             {message && (
                 <div className={`alert ${message.includes('successfully') || message.includes('generated') ? 'alert-success' : 'alert-danger'} border-0 shadow-sm text-center mb-4`}>
@@ -488,14 +323,19 @@ const MyProfile = () => {
                 </div>
             )}
 
-            <div className="row g-4">
+            <div className="row g-4 mb-4">
                 {/* 2. LEFT COLUMN – IDENTITY SYSTEM */}
                 <div className="col-lg-4">
-                    <div className="card shadow-sm h-100">
+                    {/* IDENTITY SYSTEM */}
+                    <div className="card shadow-sm mb-4">
                         <div className="card-header bg-white border-bottom-0 pt-4 pb-0">
                             <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1">Identity System</h5>
                         </div>
                         <div className="card-body">
+                            <div className="mb-3">
+                                <label className="form-label text-muted small">Full Name</label>
+                                <input type="text" name="name" className="form-control fw-bold" value={profile.name} onChange={handleChange} />
+                            </div>
                             <div className="mb-3">
                                 <label className="form-label text-muted small">Email Address</label>
                                 <input type="email" className="form-control" value={profile.email} readOnly disabled />
@@ -507,6 +347,40 @@ const MyProfile = () => {
                             <div className="mb-3">
                                 <label className="form-label text-muted small">Location</label>
                                 <input type="text" name="location" className="form-control" value={profile.location} onChange={handleChange} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* STATUS & AVAILABILITY */}
+                    <div className="card shadow-sm">
+                        <div className="card-header bg-white border-bottom-0 pt-4 pb-0">
+                            <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1">Status & Availability</h5>
+                        </div>
+                        <div className="card-body">
+                            <div className="row g-3">
+                                <div className="col-12 col-md-6">
+                                    <label className="form-label text-muted small">Status</label>
+                                    <select name="status" className="form-select" value={profile.status} onChange={handleChange}>
+                                        <option value="ON_BENCH">ON_BENCH</option>
+                                        <option value="ON_CLIENT">ON_CLIENT</option>
+                                    </select>
+                                </div>
+                                <div className="col-12 col-md-6">
+                                    <label className="form-label text-muted small">Work Mode</label>
+                                    <select name="work_mode" className="form-select" value={profile.work_mode} onChange={handleChange}>
+                                        <option value="REMOTE">REMOTE</option>
+                                        <option value="OFFICE">OFFICE</option>
+                                        <option value="HYBRID">HYBRID</option>
+                                    </select>
+                                </div>
+                                <div className="col-12 col-md-6">
+                                    <label className="form-label text-muted small">Experience (Yrs)</label>
+                                    <input type="number" name="experience_years" className="form-control" step="0.5" value={profile.experience_years} onChange={handleChange} />
+                                </div>
+                                <div className="col-12 col-md-6">
+                                    <label className="form-label text-muted small">Bandwidth ({profile.bandwidth}%)</label>
+                                    <input type="range" name="bandwidth" className="form-range" min="0" max="100" step="5" value={profile.bandwidth} onChange={handleChange} />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -616,69 +490,100 @@ const MyProfile = () => {
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {/* 6. STATUS & AVAILABILITY SECTION */}
+            {/* CLIENT SECTION — Full Width */}
+            <div className="row g-4 mb-4">
                 <div className="col-12">
                     <div className="card shadow-sm">
-                        <div className="card-header bg-white border-bottom-0 pt-4 pb-0">
-                            <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1">Status & Availability</h5>
+                        <div className="card-header bg-white border-bottom-0 pt-4 pb-0 d-flex justify-content-between align-items-center">
+                            <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1 mb-0">Clients</h5>
+                            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={addClient}><i className="bi bi-plus-lg me-1"></i>Add Client</button>
                         </div>
                         <div className="card-body">
-                            <div className="row g-3">
-                                <div className="col-md-3">
-                                    <label className="form-label text-muted small">Current Status</label>
-                                    <select name="status" className="form-select" value={profile.status} onChange={handleChange}>
-                                        <option value="ON_BENCH">ON_BENCH</option>
-                                        <option value="ON_CLIENT">ON_CLIENT</option>
-                                    </select>
-                                </div>
-                                <div className="col-md-3">
-                                    <label className="form-label text-muted small">Work Mode</label>
-                                    <select name="work_mode" className="form-select" value={profile.work_mode} onChange={handleChange}>
-                                        <option value="REMOTE">REMOTE</option>
-                                        <option value="OFFICE">OFFICE</option>
-                                        <option value="HYBRID">HYBRID</option>
-                                    </select>
-                                </div>
-                                <div className="col-md-3">
-                                    <label className="form-label text-muted small">Experience (Years)</label>
-                                    <input type="number" name="experience_years" className="form-control" step="0.5" value={profile.experience_years} onChange={handleChange} />
-                                </div>
-                                <div className="col-md-3">
-                                    <label className="form-label text-muted small">Bandwidth ({profile.bandwidth}%)</label>
-                                    <input type="range" name="bandwidth" className="form-range" min="0" max="100" step="5" value={profile.bandwidth} onChange={handleChange} />
-                                </div>
-                            </div>
+                            {profile.clients && profile.clients.length > 0 ? (
+                                profile.clients.map((client, idx) => (
+                                    <div key={idx} className="border rounded p-3 mb-3 bg-light position-relative">
+                                        <button type="button" className="btn-close position-absolute top-0 end-0 m-2" onClick={() => removeClient(idx)}></button>
+                                        <div className="row g-3">
+                                            <div className="col-md-5">
+                                                <label className="form-label small text-muted">Client Name</label>
+                                                <input type="text" name="client_name" className="form-control form-control-sm fw-bold" value={client.client_name} onChange={(e) => handleClientChange(idx, e)} />
+                                            </div>
+                                            <div className="col-md-3">
+                                                <label className="form-label small text-muted">Status</label>
+                                                <select name="client_status" className="form-select form-select-sm" value={client.client_status} onChange={(e) => handleClientChange(idx, e)}>
+                                                    <option value="Active">Active</option>
+                                                    <option value="Completed">Completed</option>
+                                                    <option value="Pipeline">Pipeline</option>
+                                                </select>
+                                            </div>
+                                            <div className="col-md-4"></div>
+                                            <div className="col-md-12">
+                                                <label className="form-label small text-muted">Description (Max 150 words)</label>
+                                                <textarea
+                                                    name="description"
+                                                    className="form-control form-control-sm"
+                                                    rows={2}
+                                                    value={client.description}
+                                                    onChange={(e) => {
+                                                        const words = e.target.value.split(/\s+/).filter(w => w.length > 0);
+                                                        if (words.length <= 150 || e.target.value.length < client.description.length) {
+                                                            handleClientChange(idx, e);
+                                                        }
+                                                    }}
+                                                ></textarea>
+                                                <div className="text-end text-muted" style={{ fontSize: '0.72rem' }}>
+                                                    {client.description.split(/\s+/).filter(w => w.length > 0).length}/150 words
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-muted text-center small py-2">No clients added.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="row g-4 mb-4">
+                {/* 7. CAREER SUMMARY */}
+                <div className="col-lg-6">
+                    <div className="card shadow-sm h-100">
+                        <div className="card-header bg-white border-bottom-0 pt-4 pb-0">
+                            <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1 mb-0">Career Summary</h5>
+                        </div>
+                        <div className="card-body">
+                            <textarea name="career_summary" className="form-control" rows={5} style={{ minHeight: '140px', resize: 'vertical' }} value={profile.career_summary} onChange={handleChange} placeholder="Professional summary..."></textarea>
                         </div>
                     </div>
                 </div>
 
-                {/* 7. CAREER SUMMARY & 8. SEARCH PHRASE */}
-                <div className="col-12">
-                    <div className="card shadow-sm">
-                        <div className="card-body p-4">
-                            <div className="d-flex justify-content-between align-items-center mb-2">
-                                <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1 mb-0">Career Summary</h5>
-                            </div>
-                            <textarea name="career_summary" className="form-control mb-4" rows={4} value={profile.career_summary} onChange={handleChange} placeholder="Professional summary..."></textarea>
-
-                            <div className="d-flex justify-content-between align-items-center mb-2">
-                                <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1 mb-0">Search Phrase</h5>
-                                <button
-                                    className="btn btn-sm btn-outline-primary"
-                                    onClick={handleGenerateSearchPhrase}
-                                    disabled={autofilling}
-                                >
-                                    {autofilling ? <span className="spinner-border spinner-border-sm me-1"></span> : <i className="bi bi-magic me-1"></i>}
-                                    Generate
-                                </button>
-                            </div>
-                            <input type="text" name="search_phrase" className="form-control" value={profile.search_phrase} onChange={handleChange} placeholder="Short searchable summary..." />
+                {/* 8. SEARCH PHRASE */}
+                <div className="col-lg-6">
+                    <div className="card shadow-sm h-100">
+                        <div className="card-header bg-white border-bottom-0 pt-4 pb-0 d-flex justify-content-between align-items-center">
+                            <h5 className="card-title fw-bold text-uppercase text-secondary small ls-1 mb-0">Search Phrase</h5>
+                            <button
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={handleGenerateSearchPhrase}
+                                disabled={autofilling}
+                            >
+                                {autofilling ? <span className="spinner-border spinner-border-sm me-1"></span> : <i className="bi bi-magic me-1"></i>}
+                                Generate
+                            </button>
+                        </div>
+                        <div className="card-body">
+                            <textarea name="search_phrase" className="form-control" rows={5} style={{ minHeight: '140px', resize: 'vertical', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }} value={profile.search_phrase} onChange={handleChange} placeholder="AI-generated searchable summary..."></textarea>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {/* 4. WORK HISTORY SECTION */}
+            {/* 4. WORK HISTORY SECTION */}
+            <div className="row g-4 mb-4">
                 <div className="col-12">
                     <div className="card shadow-sm">
                         <div className="card-header bg-white border-bottom-0 pt-4 pb-0 d-flex justify-content-between align-items-center">
@@ -710,6 +615,7 @@ const MyProfile = () => {
                                             <label className="form-label small text-muted">End Date</label>
                                             <input type="date" name="end_date" className="form-control form-control-sm" value={work.end_date || ''} onChange={(e) => handleWorkHistoryChange(index, e)} />
                                         </div>
+                                        <div className="col-md-6"></div>
                                         <div className="col-md-12">
                                             <label className="form-label small text-muted">Description</label>
                                             <textarea name="description" className="form-control form-control-sm" rows={2} value={work.description} onChange={(e) => handleWorkHistoryChange(index, e)}></textarea>
@@ -721,8 +627,10 @@ const MyProfile = () => {
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {/* 5. EDUCATION SECTION */}
+            {/* 5. EDUCATION SECTION */}
+            <div className="row g-4 mb-4">
                 <div className="col-12">
                     <div className="card shadow-sm">
                         <div className="card-header bg-white border-bottom-0 pt-4 pb-0 d-flex justify-content-between align-items-center">
