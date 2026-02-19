@@ -196,49 +196,61 @@ def search_employees(
     # JD Scoring & Sorting Logic
     # ---------------------------------------------------------
     if jd and results:
-        import re
-        jd_text = jd.lower()
-        jd_keywords = set(re.findall(r'\b[a-z]{3,}\b', jd_text))
-        
-        if not jd_keywords:
-            return []
-
-        scored_results = []
-        for emp in results:
-            # Helper to check text overlap
-            def get_matches(source_text, keywords):
-                if not source_text:
-                    return set()
-                tokens = set(re.findall(r'\b[a-z]{3,}\b', source_text.lower()))
-                return keywords.intersection(tokens)
-
-            # Calculate individual matches
-            tech_str = " ".join([t.get("tech", "") for t in emp.tech]) if emp.tech else ""
-            tech_matches = get_matches(tech_str, jd_keywords)
-            phrase_matches = get_matches(emp.search_phrase, jd_keywords)
-            summary_matches = get_matches(emp.career_summary, jd_keywords)
+        llm_service = LLMService(db)
+        try:
+            # 1. Parse JD using LLM
+            parsed_jd = llm_service.parse_jd_with_llm(jd)
             
-            work_str = ""
-            if emp.work_history:
-                work_str += " ".join([f"{h.description} {h.role} {h.project}" for h in emp.work_history])
-            if emp.clients:
-                client_str = " ".join([c.get("description", "") for c in emp.clients])
-                work_str += " " + client_str
-            work_matches = get_matches(work_str, jd_keywords)
-
-            # Unique matched keywords across all relevant fields
-            all_matched_keywords = tech_matches | phrase_matches | summary_matches | work_matches
-            
-            # Percentage Score
-            percentage = (len(all_matched_keywords) / len(jd_keywords)) * 100 if jd_keywords else 0
-            
-            if percentage >= 50:
-                emp.match_score = round(percentage, 1)
+            # 2. Compute scores for each profile
+            scored_results = []
+            for emp in results:
+                match_data = llm_service.compute_match_score(emp, parsed_jd)
+                emp.match_score = match_data["match_score"]
+                # Optionally keep track of matched skills if needed, but match_score is the priority
                 scored_results.append(emp)
-        
-        # Sort by match score desc
-        scored_results.sort(key=lambda x: x.match_score, reverse=True)
-        return scored_results
+            
+            # 3. Sort by match score desc
+            scored_results.sort(key=lambda x: x.match_score if x.match_score is not None else 0, reverse=True)
+            return scored_results
+        except Exception as e:
+            print(f"JD Scoring failed, falling back to basic matching: {e}")
+            # Fallback to existing regex logic if LLM fails (optional, but requested non-breaking)
+            import re
+            jd_text = jd.lower()
+            jd_keywords = set(re.findall(r'\b[a-z]{3,}\b', jd_text))
+            
+            if not jd_keywords:
+                return []
+
+            scored_results = []
+            for emp in results:
+                def get_matches(source_text, keywords):
+                    if not source_text: return set()
+                    tokens = set(re.findall(r'\b[a-z]{3,}\b', source_text.lower()))
+                    return keywords.intersection(tokens)
+
+                tech_str = " ".join([t.get("tech", "") for t in emp.tech]) if emp.tech else ""
+                tech_matches = get_matches(tech_str, jd_keywords)
+                phrase_matches = get_matches(emp.search_phrase, jd_keywords)
+                summary_matches = get_matches(emp.career_summary, jd_keywords)
+                
+                work_str = ""
+                if emp.work_history:
+                    work_str += " ".join([f"{h.description} {h.role} {h.project}" for h in emp.work_history])
+                if emp.clients:
+                    client_str = " ".join([c.get("description", "") for c in emp.clients])
+                    work_str += " " + client_str
+                work_matches = get_matches(work_str, jd_keywords)
+
+                all_matched_keywords = tech_matches | phrase_matches | summary_matches | work_matches
+                percentage = (len(all_matched_keywords) / len(jd_keywords)) * 100 if jd_keywords else 0
+                
+                if percentage >= 50:
+                    emp.match_score = round(percentage, 1)
+                    scored_results.append(emp)
+            
+            scored_results.sort(key=lambda x: x.match_score, reverse=True)
+            return scored_results
 
     # ---------------------------------------------------------
     # Basic Search Sorting

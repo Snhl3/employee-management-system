@@ -1,1 +1,32 @@
 /* CSS now largely handled by Bootstrap utility classes */
+
+.x-small {
+    font-size: 0.75rem;
+}
+
+.text-truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ls-1 {
+    letter-spacing: 0.05rem;
+}
+
+.last-child-mb-0>*:last-child {
+    margin-bottom: 0 !important;
+}
+
+.last-child-border-0>*:last-child {
+    border-bottom: 0 !important;
+}

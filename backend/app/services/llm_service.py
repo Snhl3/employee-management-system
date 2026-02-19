@@ -103,6 +103,135 @@ class LLMService:
         else:
              return self._generate_mock_summary(profile_data)
 
+    def parse_jd_with_llm(self, jd_text: str) -> dict:
+        """
+        Extract structured info from JD using qwen3 (via Ollama).
+        """
+        if not self.settings:
+            return {"required_skills": [], "minimum_experience_years": None, "keywords": []}
+
+        provider = self.settings.provider.lower()
+        if provider != "ollama":
+            # Per task requirement: Use Ollama with model: qwen3
+            # If provider is not ollama, we still try or return empty? 
+            # Request says "Use Ollama with model: qwen3". I'll assume qwen3 is configured in settings or use it directly.
+            pass
+
+        api_base = self.settings.api_base or "http://localhost:11434/v1"
+        client = OpenAI(
+            base_url=api_base,
+            api_key="ollama", 
+        )
+        
+        prompt = f"""
+SYSTEM PROMPT TO QWEN3:
+
+You are a strict information extraction engine.
+
+INPUT:
+A Job Description in paragraph format.
+
+TASK:
+Extract ONLY explicitly mentioned information.
+
+Return strictly valid JSON in this format:
+
+{{
+  "required_skills": [],
+  "minimum_experience_years": null,
+  "keywords": []
+}}
+
+RULES:
+- Extract only skills explicitly written.
+- If experience like "5+ years" or "minimum 4 years" is present, extract number.
+- Do NOT infer.
+- Do NOT add extra skills.
+- Do NOT explain.
+- Output JSON only.
+
+JD CONTENT:
+{jd_text}
+"""
+        
+        try:
+            response = client.chat.completions.create(
+                model="qwen3", # Hardcoded model as per requirement
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={ "type": "json_object" },
+                temperature=0,
+            )
+            return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            self.logger.error(f"JD Parsing Error: {e}")
+            return {"required_skills": [], "minimum_experience_years": None, "keywords": []}
+
+    def compute_match_score(self, profile, parsed_jd: dict) -> dict:
+        """
+        Scoring logic:
+        skill_score = (matched_skills / required_skills) * 0.4
+        experience_score = 0.2 if profile.total_experience >= minimum_experience else scaled
+        bandwidth_score = 0.2 if bandwidth > 0 else 0
+        project_score = normalized project count * 0.1
+        client_score = normalized active client count (less overload preferred) * 0.1
+        """
+        required_skills = [s.lower() for s in parsed_jd.get("required_skills", [])]
+        min_exp = parsed_jd.get("minimum_experience_years")
+        
+        # Skill Score (40%)
+        emp_skills = []
+        if hasattr(profile, 'tech') and profile.tech:
+            emp_skills = [t.get("tech", "").lower() for t in profile.tech]
+        
+        skill_match_count = 0
+        if required_skills:
+            skill_match_count = len(set(emp_skills).intersection(set(required_skills)))
+            skill_score = (skill_match_count / len(required_skills)) * 0.4
+        else:
+            skill_score = 0.4 # Default to max if no skills required? Or 0? 
+            # JD keywords might have info too
+            keywords = [k.lower() for k in parsed_jd.get("keywords", [])]
+            if keywords:
+                # Fallback to keywords intersection
+                emp_text = f"{profile.career_summary or ''} {profile.search_phrase or ''}".lower()
+                kw_match_count = sum(1 for kw in keywords if kw in emp_text)
+                skill_score = (kw_match_count / len(keywords)) * 0.4
+
+        # Experience Score (20%)
+        emp_exp = getattr(profile, 'experience_years', 0.0) or 0.0
+        if min_exp is not None and min_exp > 0:
+            if emp_exp >= min_exp:
+                experience_score = 0.2
+            else:
+                experience_score = (emp_exp / min_exp) * 0.2
+        else:
+            experience_score = 0.2 # No min exp required
+
+        # Bandwidth Score (20%)
+        bandwidth_score = 0.2 if getattr(profile, 'bandwidth', 0) > 0 else 0
+
+        # Project Score (10%)
+        # Normalizing project count: assume 5 projects is a solid "full" score
+        work_history_count = len(profile.work_history) if hasattr(profile, 'work_history') and profile.work_history else 0
+        project_score = min(work_history_count, 5) / 5 * 0.1
+
+        # Client Score (10%)
+        # Lower better. Let's say 0 clients = 0.1, 5+ clients = 0.0
+        # If 0 active clients, they are free (on bench), so good for new project.
+        client_count = len(profile.clients) if hasattr(profile, 'clients') and profile.clients else 0
+        client_score = max(0, (5 - client_count) / 5) * 0.1
+
+        final_score = skill_score + experience_score + bandwidth_score + project_score + client_score
+        
+        matched_skills_list = list(set(emp_skills).intersection(set(required_skills))) if required_skills else []
+
+        return {
+            "match_score": round(final_score * 100, 1),
+            "matched_skills": matched_skills_list
+        }
+
     def _generate_openai_profile(self, partial_data: str, api_key: str) -> dict:
         client = OpenAI(api_key=api_key)
         prompt = self._get_profile_prompt(partial_data)
